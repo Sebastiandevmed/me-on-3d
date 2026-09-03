@@ -31,7 +31,7 @@
   <button id="resetCam">reset camera</button>
 </div>
 <div id="err"></div>
-<div id="help">Arrastra para orbitar, rueda para zoom. La cabeza sigue el cursor. Clic sobre el personaje = vibe (también automático cada 20-40 s).</div>
+<div id="help">Arrastra para orbitar, rueda para zoom. La cabeza mira al cursor. Clic sobre el personaje = vibe (se pone los audífonos y cabecea; también automático cada 30-50 s).</div>
 <div id="info">cargando…</div>
 <script type="module">
 import * as THREE from 'three';
@@ -39,9 +39,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 const info = document.getElementById('info');
-const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '', headQ: () => head && head.quaternion.toArray(), barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
+const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '',
+  headQ: () => follow.head && follow.head.quaternion.toArray(), chestQ: () => follow.chest && follow.chest.quaternion.toArray(), hpQ: () => follow.hp && follow.hp.quaternion.toArray(),
+  barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -58,11 +61,26 @@ controls.minDistance = 0.6; controls.maxDistance = 12;
 const resetCamera = () => { camera.position.copy(CAM_POS); controls.target.copy(CAM_TGT); controls.update(); };
 resetCamera(); document.getElementById('resetCam').onclick = resetCamera;
 
-// Luces como en build_scene.py: key AREA azulada en Blender (-1.2, 2.4, 2.2) -> glTF (-1.2, 2.2, -2.4);
-// screen_glow AREA en Blender (0, 1.3, 1.1) -> glTF (0, 1.1, -1.3). Pantallas, barras RGB y ventana son emisivas.
-const key = new THREE.SpotLight(0xbfd9ff, 30, 0, Math.PI / 3.2, 0.8, 2); key.position.set(-1.2, 2.2, -2.4); key.target.position.copy(CAM_TGT); scene.add(key, key.target);
-const glow = new THREE.PointLight(0x99bfff, 4, 5, 2); glow.position.set(0, 1.1, -1.3); scene.add(glow);
-scene.add(new THREE.AmbientLight(0x2a3a5c, 0.8));
+// ---- luces. Coordenadas glTF (x, y, z) = Blender (x, z, -y).
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMappingExposure = 1.15;
+RectAreaLightUniformsLib.init();
+const lights = [];
+const key = new THREE.SpotLight(0xcfe0ff, 40, 0, Math.PI / 3.4, 0.7, 2);   // key azulada desde arriba-izquierda, con sombra
+key.position.set(-1.2, 2.5, -2.3); key.target.position.copy(CAM_TGT);
+key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 12;
+scene.add(key, key.target); lights.push(key);
+const ceil = new THREE.PointLight(0xffe0c0, 6, 7, 2); ceil.position.set(0.6, 2.6, 0.2); scene.add(ceil); lights.push(ceil);   // calida del techo
+const win = new THREE.RectAreaLight(0x8fb8ff, 5, 3.2, 1.8); win.position.set(-0.3, 1.5, 1.7); win.lookAt(-0.3, 1.2, 0); scene.add(win); lights.push(win);
+scene.add(new THREE.HemisphereLight(0x33405c, 0x0b0b0e, 0.5));
+// luz de las pantallas (se enciende con el fundido) y de las barras RGB (siguen el ciclo de color)
+const SCREEN_POS = { screen_left: [-0.6, 0.95, -1.35], screen_center: [0, 0.95, -1.35], screen_right: [0.6, 0.95, -1.35], screen_laptop: [0, 0.9, -1.0] };
+const screenLights = {};
+for (const [n, p] of Object.entries(SCREEN_POS)) { const l = new THREE.PointLight(0xbfd4ff, 0, 2.2, 2); l.position.set(...p); scene.add(l); screenLights[n] = l; lights.push(l); }
+const barLights = [];
+for (const x of [-1.05, 1.05]) { const l = new THREE.PointLight(0x4090ff, 3, 4, 2); l.position.set(x, 1.3, 1.2); scene.add(l); barLights.push(l); lights.push(l); }
+status.lights = lights.length; status.shadows = true;
 
 new RGBELoader().load('night.hdr', (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
   undefined, (e) => console.error('night.hdr: ' + (e.message || e)));
@@ -70,7 +88,7 @@ new RGBELoader().load('night.hdr', (t) => { t.mapping = THREE.EquirectangularRef
 const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
 const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
 
-let mixer = null, actions = {}, head = null, screens = [], bars = [], character = null;
+let mixer = null, actions = {}, screens = [], bars = [], character = null;
 const clock = new THREE.Clock();
 const mouse = { x: 0, y: 0 };
 addEventListener('mousemove', e => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
@@ -82,12 +100,9 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 const BASE = ['idle', 'typing', 'Blink'];
 const EXCLUSIVE = { vibe: { fade: 0.5, dropBlink: true }, lookAround: { fade: 0.4, dropBlink: false }, introAnimation: { fade: 0.5, dropBlink: false } };
 let exclusive = null;            // nombre del clip exclusivo en curso
-let followWeight = 0;            // peso del seguimiento de cursor (baja a 0 durante vibe/lookAround)
-let headClipQ = null;            // cuaternión de spine006 tal como lo dejan los clips (sin el offset del cursor)
 let screensOnAt = Infinity;      // instante (performance.now) en que empieza el fundido de las pantallas
-// idle no anima spine006, así que nadie "reescribe" el hueso cada frame: hay que deshacer el offset antes del mixer
-// y antes de arrancar cualquier acción (si no, el mixer guardaría el offset como pose de reposo y se acumularía).
-const undoFollow = () => { if (head && headClipQ) head.quaternion.copy(headClipQ); };
+// idle no anima spine006/spine003/headphones, así que nadie "reescribe" esos huesos cada frame: hay que
+// deshacer el offset del seguimiento antes del mixer (undoFollow, definido mas abajo junto al resto del sistema).
 
 const playLoop = (n, fade = 0.5) => { const a = actions[n]; if (!a) return; undoFollow(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.clampWhenFinished = false; a.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play(); };
 const playOnce = (n, fade, cb) => {
@@ -107,17 +122,21 @@ const playExclusive = (n) => {
   return true;
 };
 const vibe = () => playExclusive('vibe');
+window.__vibe = vibe;   // para la sonda headless
 const browup = () => { const a = actions.browup; if (!a || a.isRunning()) return; playOnce('browup', 0.1, () => a.fadeOut(0.15)); };
 
 loader.load('avatar.glb', (gltf) => {
   scene.add(gltf.scene);
   gltf.scene.traverse(o => {
-    if (o.isMesh) { o.frustumCulled = false; }
+    if (o.isMesh) { o.frustumCulled = false; o.castShadow = !/^(screen_|window_far|floor|ceiling|wall_)/.test(o.name); o.receiveShadow = !/^(screen_|window_far)/.test(o.name); }
     if (/^screen_/.test(o.name) && o.isMesh) screens.push(o);
     if (/^rgb_bar_/.test(o.name) && o.isMesh) bars.push(o);
-    if (o.name === 'spine006') { head = o; headClipQ = o.quaternion.clone(); }
+    if (o.name === 'spine006') follow.head = o;
+    if (o.name === 'spine003') follow.chest = o;
+    if (o.name === 'headphones') follow.hp = o;
     if (o.name === 'Body') character = o;
   });
+  saveFollow();
   mixer = new THREE.AnimationMixer(gltf.scene);
   for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
   status.loaded = true;
@@ -128,10 +147,10 @@ loader.load('avatar.glb', (gltf) => {
   screens.forEach(s => { s.material = s.material.clone(); s.material.emissiveIntensity = 0; });
   screensOnAt = performance.now() + 1500;   // el fundido se aplica en animate()
   bars.forEach(b => { b.material = b.material.clone(); });
-  // vibe automático cada 20-40 s y al hacer clic sobre el personaje
-  const schedule = () => setTimeout(() => { vibe(); schedule(); }, 20000 + Math.random() * 20000); schedule();
+  // vibe automático cada 30-50 s (el clip ahora dura 9 s) y al hacer clic sobre el personaje
+  const schedule = () => setTimeout(() => { vibe(); schedule(); }, 30000 + Math.random() * 20000); schedule();
   document.querySelectorAll('button[data-clip]').forEach(b => { b.disabled = !actions[b.dataset.clip]; b.onclick = () => { const n = b.dataset.clip; if (n === 'browup') browup(); else playExclusive(n); }; });
-  const ray = new THREE.Raycaster(); let downAt = null;
+  let downAt = null;   // reusa el `ray` global (declarado junto al sistema de seguimiento)
   renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return; // fue un arrastre de la cámara
@@ -140,30 +159,55 @@ loader.load('avatar.glb', (gltf) => {
   });
 }, undefined, (err) => { console.error('avatar.glb: ' + (err.message || err)); });
 
-// ---- seguimiento de cursor en spine006: rotación mundial aplicada DESPUÉS del mixer (encima del clip) ----
-const LIM = Math.PI / 6;                       // ±30°
+// ---- seguimiento de cursor: la cabeza (spine006) MIRA al punto 3D del cursor (a la profundidad de
+// la cabeza), el pecho (spine003) acompana el 30 % del yaw y el nodo headphones (hijo de la cabeza,
+// audifonos colgando del cuello) cancela el giro para no columpiarse. Se aplica DESPUES del mixer y
+// se deshace antes del siguiente update (los clips base no escriben estos huesos cada frame).
+const YAW_MAX = Math.PI / 4, PITCH_UP = Math.PI / 7.2, PITCH_DOWN = Math.PI / 9;   // 45 / 25 / 20 grados
+const follow = { head: null, chest: null, hp: null };            // Object3D
+const saved = { head: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
 const look = { yaw: 0, pitch: 0 };
-const qWorld = new THREE.Quaternion(), qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), eul = new THREE.Euler();
-const axisY = new THREE.Vector3(0, 1, 0), camRight = new THREE.Vector3();
+let followWeight = 0;
+const undoFollow = () => { for (const k in follow) if (follow[k] && saved[k]) follow[k].quaternion.copy(saved[k]); };
+const saveFollow = () => { for (const k in follow) if (follow[k]) saved[k] = (saved[k] || new THREE.Quaternion()).copy(follow[k].quaternion); };
+const ray = new THREE.Raycaster();
+const vHead = new THREE.Vector3(), vTarget = new THREE.Vector3(), vDir = new THREE.Vector3(), vCam = new THREE.Vector3();
+const qWorld = new THREE.Quaternion(), qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), qW = new THREE.Quaternion(), qHeadOld = new THREE.Quaternion(), qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion();
+const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0);
+function worldRotate(obj, q, weight) {   // newLocal = parent^-1 * slerp(I, q, w) * parent * local
+  obj.parent.getWorldQuaternion(qParent);
+  qW.identity().slerp(q, weight);
+  qTmp.copy(qParent).invert().multiply(qW).multiply(qParent);   // parent^-1 * qW * parent
+  obj.quaternion.premultiply(qTmp);
+}
 function applyHeadFollow() {
   const active = !(exclusive === 'vibe' || exclusive === 'lookAround');
   followWeight += ((active ? 1 : 0) - followWeight) * 0.08;
-  look.yaw += (mouse.x * LIM - look.yaw) * 0.08;
-  look.pitch += (mouse.y * LIM * 0.5 - look.pitch) * 0.08;
-  if (!head || followWeight < 0.001) return;
-  // Giro en espacio mundial: yaw alrededor de Y mundial, pitch alrededor del eje derecho de la cámara.
-  // El personaje mira a -Z; con r = derecha de la cámara, girar hacia la derecha de la pantalla es yaw*(-r.x)
-  // y mirar hacia arriba de la pantalla es pitch*r.x  (v' ≈ v + θ·(eje × v)).
-  camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-  // Factor continuo (-1..1) en vez de sign(r.x): el seguimiento se desvanece suavemente en las vistas laterales.
-  const s = camRight.x;
-  qWorld.setFromAxisAngle(axisY, -s * look.yaw * followWeight);
-  qTmp.setFromAxisAngle(camRight, s * look.pitch * followWeight);
-  qWorld.multiply(qTmp);
-  head.parent.getWorldQuaternion(qParent);
-  // newLocal = parent^-1 * R * parent * local
-  qTmp.copy(qParent).invert().multiply(qWorld).multiply(qParent);
-  head.quaternion.premultiply(qTmp);
+  if (!follow.head) return;
+  follow.head.getWorldPosition(vHead);
+  camera.getWorldPosition(vCam);
+  ray.setFromCamera(new THREE.Vector2(mouse.x, mouse.y), camera);
+  vTarget.copy(ray.ray.origin).addScaledVector(ray.ray.direction, vHead.distanceTo(vCam));
+  vDir.subVectors(vTarget, vHead);
+  if (vDir.length() > 0.05) {
+    vDir.normalize();
+    const yaw = Math.atan2(-vDir.x, -vDir.z);          // el personaje mira a -Z
+    const pitch = Math.asin(Math.max(-1, Math.min(1, vDir.y)));
+    look.yaw += (Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw)) - look.yaw) * 0.08;
+    look.pitch += (Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch)) - look.pitch) * 0.08;
+  }
+  if (followWeight < 0.001) return;
+  qYaw.setFromAxisAngle(AX_Y, look.yaw); qPitch.setFromAxisAngle(AX_X, look.pitch);
+  qWorld.copy(qYaw).multiply(qPitch);
+  if (follow.chest) { qTmp.setFromAxisAngle(AX_Y, look.yaw * 0.3); worldRotate(follow.chest, qTmp, followWeight); }
+  // el pecho ya giro: la cabeza aplica el resto (el giro de mundo se compone igual, la cabeza es hija)
+  qHeadOld.copy(follow.head.quaternion);
+  qTmp.setFromAxisAngle(AX_Y, look.yaw * 0.7).multiply(qPitch);
+  worldRotate(follow.head, qTmp, followWeight);
+  if (follow.hp) {   // conservar el mundo: hp_local = head_new^-1 * head_old * hp_old
+    qTmp.copy(follow.head.quaternion).invert().multiply(qHeadOld);
+    follow.hp.quaternion.premultiply(qTmp);
+  }
 }
 
 let frames = 0, fpsT = performance.now(), watchdog = 0, rafId = 0;
@@ -174,10 +218,10 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.1); const t = clock.elapsedTime;
   undoFollow();
   if (mixer) mixer.update(dt);
-  if (head) headClipQ.copy(head.quaternion);
+  saveFollow();
   applyHeadFollow();
-  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); }
-  bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; });
+  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); for (const [n, l] of Object.entries(screenLights)) l.intensity = 1.6 * k * k; }
+  bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; barLights[i] && barLights[i].color.copy(b.material.emissive); });
   controls.update(); renderer.render(scene, camera);
   frames++; status.frames++; status.exclusive = exclusive; status.screen = screens.length ? screens[0].material.emissiveIntensity : 0; const now = performance.now();
   if (now - fpsT > 500) { status.fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
