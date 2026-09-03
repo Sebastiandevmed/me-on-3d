@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-03 (sesión 3, plan de pulido: tareas 15-21 completas sobre las 14 de la sesión 2, revisión final de rama hecha y ola de correcciones aplicada. El usuario YA aprobó las capturas visuales de la sesión 3. Pendiente: URL del repo del portafolio, decisión de archivado, integrar `avatar-3d` en `main` y la prueba del visor en ventana real)
+**Última actualización:** 2026-09-03 (sesión 4: arreglo de la barba estirada al seguir el cursor, ver "Sesión 4". Sesión 3, plan de pulido: tareas 15-21 completas sobre las 14 de la sesión 2, revisión final de rama hecha y ola de correcciones aplicada. El usuario YA aprobó las capturas visuales de la sesión 3. Pendiente: URL del repo del portafolio, decisión de archivado, integrar `avatar-3d` en `main` y la prueba del visor en ventana real)
 
 ## Cómo retomar
 
@@ -84,6 +84,14 @@ Es seguro porque ninguna textura alimenta `Alpha` (`export_glb.py` lo verifica y
 La palanca para bajar peso siguen siendo las texturas, no la geometría: `CHAR_QUALITY` y `TEX_LIMITS` (`medellin` a 1504 px sin reescalar); el resto ya va a 1024. La escalera `LADDER` baja calidad/tamaño del personaje si no cabe (JPEG 92 → 85 → 70 → personaje a 1536), pero hoy pasa de sobra en el primer escalón.
 
 Concesión conocida: `assemble.py` imprime `INTERSECCIONES 57` (no 0). Son vértices de `handL`/`handR` dentro de la caja `base_laptop` (la palma se hunde en el reposamanos del portátil, que solo tiene 12 mm de grosor). Es anterior a este plan (la pose `SIT` de `poses.py` no cambió) y corregirla obligaría a rehacer `typing` y `vibe`; no se ve en los renders. `verts_en_escritorio`, `en_tapa_laptop` y `en_respaldo` siguen en 0.
+
+## Sesión 4 (2026-09-03): la barba se estiraba al seguir el cursor
+
+Hallazgo del usuario en el visor real: al mirar al cursor la cara se deformaba, la barba se estiraba hacia el pecho y salía una "papada". Causa raíz (no era del visor): el rig automático de Meshy reparte el peso entre el cuello (`spine005`) y la cabeza (`spine006`) con una rampa larguísima: a la altura de la barbilla el cuello pesaba 30-40 % y a la de los ojos todavía 10 %. Como el visor (y `lookAround`) giran solo `spine006`, la mandíbula y la barba se quedaban a medio camino.
+
+Arreglo: `blender/scripts/fix_head_weights.py` (va justo después de `add_headphones.py`, antes de `check_rig.py`). Por encima de la barbilla (z >= base de `spine006` + 5 mm) todo el peso del cuello pasa a la cabeza; entre 45 mm por debajo y ese punto hay una rampa suave para que la garganta siga siendo cuello. Idempotente con `Body['head_weights_fixed']`. `--probe` renderiza la cabeza girada (yaw 40°, pitch -15°) con los pesos viejos para ver el defecto (`generated/renders/head_weights_before_*.png`); la ejecución normal renderiza la misma pose ya arreglada (`head_weights_after_*.png`). Medido: cuello en barbilla..+6 cm 15.3 % → 0 %, en +6..+20 cm 5.4 % → 0 %.
+
+Regenerado después: `animate.py`, `check_anim.py`, `assemble.py`, `export_glb.py`, `glb_inspect.py` y `preview_probe.mjs` (todo OK; GLB 2665 KB / 49 390 tris; `preview_shot_look.png` ya sin el bulto bajo la barbilla). No se tocó `export/preview.html`.
 
 ## Créditos Higgsfield
 
