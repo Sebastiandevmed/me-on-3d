@@ -188,7 +188,7 @@ def seg_len(parent, child):
     return (arm.data.bones[child].head_local - arm.data.bones[parent].head_local).length
 
 
-def reach(side, wrist_world, hand_dir, palm_dir, elbow_hint=None):
+def reach(side, wrist_world, hand_dir, palm_dir, elbow_hint):
     """IK analitica de dos huesos: coloca la muneca (cabeza de hand<side>) en `wrist_world`.
 
     `hand_dir` es hacia donde apuntan los dedos y `palm_dir` hacia donde mira la palma (los dos
@@ -205,11 +205,13 @@ def reach(side, wrist_world, hand_dir, palm_dir, elbow_hint=None):
     T = Vector(wrist_world)
     d = T - S
     dist = min(d.length, (L1 + L2) * 0.995)
+    if dist < 1e-6:
+        common.fail('reach: objetivo en el hombro')
     d.normalize()
     # angulo del brazo respecto a la recta hombro-muneca (ley de cosenos)
     cos_a = max(-1.0, min(1.0, (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist)))
     a = math.acos(cos_a)
-    hint = Vector(elbow_hint or (SX[s] * -1.0, -0.6, -0.5)).normalized()   # codo afuera, atras y abajo
+    hint = Vector(elbow_hint).normalized()      # obligatorio: hoy siempre ELBOW_HINT(s)
     perp = hint - d * hint.dot(d)
     perp.normalize()
     E = S + (d * math.cos(a) + perp * math.sin(a)) * L1
@@ -273,6 +275,10 @@ check_sit_arms()
 # teclas. La carrera maxima (0.18) es menor que la version 1 (0.30), que parecia dar masajes.
 # `up` = 0 es la pose SIT (palma sobre el laptop); 1 = mano arriba.
 STRIKES = {'L': (3, 11, 17, 27, 35, 43), 'R': (7, 13, 21, 31, 39, 45)}
+# El bucle de abajo solo keyframea los frames impares (range(1, 50, 2)): el fondo del golpe
+# (up = 0) cae en un key SOLO si el frame del golpe es impar. Con un golpe en frame par el
+# bezier lo suaviza y el golpe desaparece.
+assert all(f % 2 == 1 for v in STRIKES.values() for f in v), 'STRIKES: los golpes deben caer en frames impares'
 HOVER, STROKE, DIP_FRAMES = 0.35, 0.18, 2.0
 
 
@@ -392,6 +398,17 @@ bpy.context.view_layer.update()
 SIT_WRIST = {s: (arm.matrix_world @ arm.pose.bones[f'hand{s}'].head).copy() for s in 'LR'}
 
 
+def zero_shoulders():
+    """Hombros en reposo antes de resolver la IK.
+
+    `reach()` lee la matriz de mundo del hombro, que depende de shoulderL/R. Sin esto la IK
+    dependeria del valor que las fases anteriores hayan dejado en esos huesos (hoy 0 por el
+    orden en que se construye el clip, pero es una dependencia invisible).
+    """
+    for b in ('shoulderL', 'shoulderR'):
+        arm.pose.bones[b].rotation_euler = (0.0, 0.0, 0.0)
+
+
 def hands_to_cups(f, u_hp):
     """Coloca ambas manos en las copas con headphones en el estado u_hp y keyframea todo.
 
@@ -399,6 +416,7 @@ def hands_to_cups(f, u_hp):
     estan en el teclado y no se recalculan, asi que la mezcla sigue siendo coherente.
     """
     poses.apply(arm, SIT)
+    zero_shoulders()
     eul, loc = hp_state(u_hp)
     key(HP, f, euler=eul, loc=loc)
     for s in 'LR':
@@ -414,6 +432,7 @@ def hands_travel(f, u_hp, t):
     de "adelante" (teclado) a "arriba y atras" (copa) con la palma ya mirando hacia adentro.
     """
     poses.apply(arm, SIT)
+    zero_shoulders()
     eul, loc = hp_state(u_hp)
     key(HP, f, euler=eul, loc=loc)
     for s in 'LR':

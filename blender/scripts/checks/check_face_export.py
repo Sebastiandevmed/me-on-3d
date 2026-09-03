@@ -88,6 +88,8 @@ def main():
     hp_on = poses.headphones_on()
     if hp_on is None:
         common.fail('falta blender/headphones.json (lo escribe add_headphones.py)')
+    if 'headphones' not in arm.pose.bones:
+        common.fail('falta el hueso headphones en el rig (lo crea add_headphones.py)')
     hp = arm.pose.bones['headphones']
     hp.rotation_mode = 'XYZ'
     hp.rotation_euler, hp.location = hp_on

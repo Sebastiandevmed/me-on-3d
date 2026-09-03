@@ -235,7 +235,7 @@ def main():
     print('HP TRIS', extra, 'TOTAL_TRIS', total)
 
     # ---------------------------------------------------------------- renders de control
-    prev_cam = bpy.context.scene.camera
+    # (todas las camaras se purgan aqui y al final; no se restaura ninguna previa)
     for o in list(bpy.data.objects):
         if o.type in ('CAMERA', 'LIGHT'):
             bpy.data.objects.remove(o)
@@ -264,8 +264,6 @@ def main():
     for o in list(bpy.data.objects):
         if o.type in ('CAMERA', 'LIGHT'):
             bpy.data.objects.remove(o)
-    if prev_cam and prev_cam.name in bpy.data.objects:
-        bpy.context.scene.camera = prev_cam
     common.save(os.path.join(common.BLEND_DIR, 'character.blend'))
     print('HP OK')
 

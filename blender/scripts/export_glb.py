@@ -32,9 +32,10 @@
 #    termina en SIT) para los huesos que anima y los valores del archivo para el resto.
 #    Diferencia respecto al SIT del archivo: < 6 grados (manos ~5 grados, Task 10 las cerro en un
 #    SIT ligeramente distinto). Se verifica.
-#  - Si avatar.glb supera los 10 MB se baja por una escalera de calidad: JPEG 85 -> JPEG 70
-#    -> personaje a 1536. Ninguna textura depende de alfa (se verifica), asi que JPEG global
-#    es seguro.
+#  - Todas las texturas se exportan en JPEG (el atlas del personaje a CHAR_QUALITY = 92). Si
+#    avatar.glb supera los 10 MiB se baja por una escalera de calidad: JPEG 92 -> JPEG 85 ->
+#    JPEG 70 -> personaje a 1536. Ninguna textura depende de alfa (se verifica), asi que JPEG
+#    global es seguro; el exportador conserva PNG solo para imagenes con canal alfa.
 #
 # Uso: tools/run_blender.sh blender/avatar.blend blender/scripts/export_glb.py 2>&1 | grep -E 'EXPORT|GLB|CHECK|Error|Traceback'
 import sys, os, json, struct
@@ -62,9 +63,15 @@ TEX_LIMITS = {'medellin': 2048}      # la ventana se ve enorme en pantalla: no r
 # la clave es el NOMBRE SIN EXTENSION: el datablock de Blender se llama 'medellin.png' pero el
 # glTF exporta la imagen como 'medellin' (que es lo que comprueba el check de mas abajo).
 CHAR_QUALITY = 92                    # el atlas del personaje tiene miles de bordes: JPEG alto
+CHAR_IMAGE = 'character_texture_clean'   # nombre de la imagen del atlas dentro del GLB
 # escalera de calidad (formato de imagen, calidad JPEG del resto, lado maximo de la textura del personaje)
+# El primer escalon NO puede ser fmt='AUTO': para el exportador glTF, AUTO significa "PNG se queda
+# PNG", y tanto el atlas del personaje (bpy.data.images.new + file_format='PNG') como medellin.png
+# son PNG, asi que CHAR_QUALITY quedaba inerte y el GLB salia con 6 imagenes image/png (10.2 MB).
+# Con fmt='JPEG' el exportador convierte todo a JPEG salvo las imagenes con alfa (que conserva en
+# PNG); arriba ya se verifica que ninguna textura alimenta Alpha, asi que es seguro.
 LADDER = [
-    dict(fmt='AUTO', quality=85, char=2048),
+    dict(fmt='JPEG', quality=CHAR_QUALITY, char=2048),
     dict(fmt='JPEG', quality=85, char=2048),
     dict(fmt='JPEG', quality=70, char=2048),
     dict(fmt='JPEG', quality=70, char=1536),
@@ -201,10 +208,9 @@ if drift > 1e-4: common.fail('la pose base antes de exportar ya no es SIT')
 
 # ------------------------------------------------------------------ 5. exportar (escalera)
 def do_export(path, draco, step):
-    # el exportador glTF no admite calidad JPEG por imagen: en el primer intento (formato AUTO,
-    # todo cabe suelto) se sube la calidad del archivo entero a CHAR_QUALITY para no perder
-    # nitidez en el atlas del personaje; si no cabe en el presupuesto, la escalera baja como antes.
-    quality = max(step['quality'], CHAR_QUALITY) if step is LADDER[0] else step['quality']
+    # el exportador glTF no admite calidad JPEG por imagen: la calidad del escalon se aplica a
+    # todas. El primer escalon ya vale CHAR_QUALITY (ver LADDER).
+    quality = step['quality']
     common.export_glb(path, draco=draco, animations=True,
                       export_image_format=step['fmt'],
                       export_jpeg_quality=quality,     # Blender >= 4.2
@@ -267,6 +273,11 @@ check('emissiveTexture' not in ch, 'Character sin emissiveTexture')
 check('KHR_materials_specular' not in ch.get('extensions', {}), 'Character sin KHR_materials_specular')
 win = next((w for n, _, w, h, _ in imgs if n == 'medellin'), None)
 check(win == 1504, f'medellin exportada a {win} de ancho (esperado 1504, sin reescalar)')
+# el atlas del personaje DEBE salir en JPEG: en PNG pesa ~5 MB y CHAR_QUALITY seria inerte
+char_mime = next((m for n, m, _, _, _ in imgs if n == CHAR_IMAGE), None)
+check(char_mime == 'image/jpeg', f'{CHAR_IMAGE} mime={char_mime} (esperado image/jpeg, q{CHAR_QUALITY})')
+png = [n for n, m, _, _, _ in imgs if m == 'image/png']
+print('EXPORT imagenes PNG restantes (solo se justifican con alfa)', png)
 
 by_name = {}
 for i, n in enumerate(g.get('nodes', [])):
