@@ -1,0 +1,4 @@
+generated/
+export/*.glb
+*.blend1
+.DS_Store
