@@ -8,10 +8,11 @@ Reglas de la tarea:
   * El rig de Meshy NO tiene huesos de dedos: `typing` mueve manos y antebrazos.
   * Solo `vibe` y `lookAround` tocan spine006 (la cabeza).
   * `typing` toca unicamente huesos de brazo/mano (jamas columna ni cabeza).
+  * Solo `vibe` mueve el hueso `headphones` (la pieza de audifonos).
   * Cada accion keyframea en su frame 1 la pose SIT completa de los huesos que anima,
     asi el clip es autocontenido al exportarse a glTF.
   * Duraciones a 24 fps: introAnimation 72, typing 48, idle 96, Blink 240,
-    browup 18, vibe 120, lookAround 96. Todas empiezan en el frame 1 y la pista
+    browup 18, vibe 216, lookAround 96. Todas empiezan en el frame 1 y la pista
     NLA se llama igual que la accion.
 
 Ejes de los brazos: upper_arm/forearm/hand tienen ejes locales a ~45 grados del plano
@@ -19,10 +20,11 @@ sagital, asi que `poses.rot()` NO sirve. Los valores de SIT salieron de `poses.a
 apuntando cada hueso a una direccion del mundo; aqui se hace lo mismo perturbando esas
 direcciones base (verificado contra SIT: reproducen exactamente TYPING_HOME).
 """
-import sys, os, math
+import sys, os, math, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, common, poses
 from poses import rot, SIT
+from mathutils import Vector
 
 arm = bpy.data.objects['Armature']
 sc = bpy.context.scene
@@ -136,6 +138,82 @@ def solve_arms(torso=None, upper=None, fore=None, hand=None):
             out[f'forearm{s}'] = poses.aim(arm, f'forearm{s}', fore(s))
         if hand:
             out[f'hand{s}'] = poses.aim(arm, f'hand{s}', hand(s))
+    return out
+
+
+# --------------------------------------------------------------------------- audifonos
+HP = 'headphones'
+HP_JSON = os.path.join(common.BLEND_DIR, 'headphones.json')
+HP_ON = poses.headphones_on()
+if HP_ON is None:
+    common.fail('falta blender/headphones.json (ejecutar add_headphones.py)')
+with open(HP_JSON) as _f:
+    HP_DATA = json.load(_f)
+
+
+def hp_state(u):
+    """Interpola el hueso headphones entre reposo (u=0, colgando del cuello) y puestos (u=1)."""
+    eul = tuple(lerp(0.0, HP_ON[0][i], u) for i in range(3))
+    loc = tuple(lerp(0.0, HP_ON[1][i], u) for i in range(3))
+    return eul, loc
+
+
+def cup_world(side, u):
+    """Centro de la copa `side` en el mundo con el hueso headphones en el estado u (0..1).
+    Requiere que el resto de la pose (torso, cabeza) ya este aplicada.
+
+    `cup_offset_rest/head` estan los dos en la trama de REPOSO del hueso (add_headphones.py los
+    midio con `A.inverted() @ centro`, A = matrix_world @ bone.matrix_local): la diferencia
+    entre los dos estados ya va dentro del offset. Por eso hay que transformarlos con la trama
+    de reposo tal como la lleva el padre (spine006), es decir quitandole el basis del propio
+    hueso; con `pb.matrix @ off` el giro de la pieza se aplicaria dos veces.
+    """
+    pb = arm.pose.bones[HP]
+    eul, loc = hp_state(u)
+    pb.rotation_mode = 'XYZ'
+    pb.rotation_euler = eul
+    pb.location = loc
+    bpy.context.view_layer.update()
+    frame = pb.matrix @ pb.matrix_basis.inverted()
+    off = lerp3(HP_DATA['cup_offset_rest'][side], HP_DATA['cup_offset_head'][side], u)
+    return arm.matrix_world @ (frame @ Vector(off))
+
+
+def seg_len(parent, child):
+    """Largo real de un segmento: distancia entre las cabezas de dos huesos en reposo.
+
+    OJO: `bone.length` NO sirve en este rig. El importador de Meshy dejo los tails en la
+    direccion correcta pero 100 veces mas lejos (upper_armL: length 25.99 m, segmento 0.26 m).
+    """
+    return (arm.data.bones[child].head_local - arm.data.bones[parent].head_local).length
+
+
+def reach(side, wrist_world, hand_dir, elbow_hint=None):
+    """IK analitica de dos huesos: coloca la muneca (cabeza de hand<side>) en `wrist_world`.
+
+    Devuelve {upper_arm, forearm, hand: euler}. El resto de la pose debe estar aplicada.
+    """
+    s = side
+    ua, fa, ha = f'upper_arm{s}', f'forearm{s}', f'hand{s}'
+    for b in (ua, fa, ha):
+        arm.pose.bones[b].rotation_euler = SIT[b]
+    bpy.context.view_layer.update()
+    S = arm.matrix_world @ arm.pose.bones[ua].head
+    L1, L2 = seg_len(ua, fa), seg_len(fa, ha)
+    T = Vector(wrist_world)
+    d = T - S
+    dist = min(d.length, (L1 + L2) * 0.995)
+    d.normalize()
+    # angulo del brazo respecto a la recta hombro-muneca (ley de cosenos)
+    cos_a = max(-1.0, min(1.0, (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist)))
+    a = math.acos(cos_a)
+    hint = Vector(elbow_hint or (SX[s] * -1.0, -0.6, -0.5)).normalized()   # codo afuera, atras y abajo
+    perp = hint - d * hint.dot(d)
+    perp.normalize()
+    E = S + (d * math.cos(a) + perp * math.sin(a)) * L1
+    out = {ua: poses.aim(arm, ua, tuple(E - S))}
+    out[fa] = poses.aim(arm, fa, tuple(T - E))
+    out[ha] = poses.aim(arm, ha, tuple(Vector(hand_dir)))
     return out
 
 
@@ -272,32 +350,106 @@ finish(act, 18, cyclic=False)
 
 
 # --------------------------------------------------------------------------- 5) vibe
-# Cabeceo de rap con los OJOS CERRADOS: 8 tiempos de 15 frames (96 BPM) en 120 frames.
-# La cabeza cae en el golpe y sube entre golpes; hombros y spine003 acompanan.
-# Amplitud subida (feedback del controlador: el cabeceo original -8.5..0.5 grados era
-# casi imperceptible en una tira de 6 frames). Ahora spine006 oscila entre -16 (levantada,
-# entre golpes) y +14 (golpe abajo): swing de 30 grados, 22 por debajo de SIT (-8); el
-# cuello suma 6 grados mas en el golpe. Envolvente de 14 frames al inicio y al final: con
-# env=0 la cabeza cae EXACTAMENTE en SIT (-8), asi encadena desde idle/typing sin salto.
-# Los ojos abren en f1 y f120 (cerrados f7..f112) por la misma razon.
-VIBE_BONES = [HEAD, NECK, 'spine003', 'shoulderL', 'shoulderR'] + LIDS
-act = new_action('vibe', VIBE_BONES)
+# 216 frames (9 s a 24 fps): se pone los audifonos con las manos, cabecea y se los quita.
+#   f1-20    las manos suben del teclado a las copas (audifonos colgando del cuello)
+#   f20-44   las manos llevan los audifonos a la cabeza (hueso headphones: reposo -> puestos)
+#   f44-52   ajuste (pausa)
+#   f52-76   las manos vuelven al teclado
+#   f60-152  cabeceo de rap (ojos cerrados f66..f146), envolvente de 14 frames
+#   f152-168 las manos suben a las copas (ya en la cabeza)
+#   f168-192 bajan los audifonos al cuello
+#   f192-216 las manos vuelven al teclado; f216 = SIT exacto (empalma con idle/typing)
+# Cabeceo: spine006 oscila entre -16 (levantada, entre golpes) y +14 (golpe abajo); con env=0
+# cae EXACTAMENTE en SIT (-8).
+# Mientras la cabeza cabecea, el hueso `headphones` es hijo de spine006 y la acompana solo.
+VIBE_BONES = [HEAD, NECK, 'spine003', 'shoulderL', 'shoulderR'] + LIDS + ARM_BONES + [HP]
+VIBE_LEN = 216
 BEAT = 15.0
-for f in range(1, 121, 2):
-    t = (f - 1) / BEAT * 2 * math.pi
-    env = min(1.0, (f - 1) / 14.0) * min(1.0, (121 - f) / 14.0)     # fade in/out
+# Muneca = centro de la copa + WRIST_OFF: hacia AFUERA (L esta en -X, asi que afuera = -X
+# para L) y 8 cm abajo. El termino en sin(pi*u) abre las manos 3 cm mas a mitad del recorrido,
+# cuando las copas pasan rozando la mandibula: medido sobre la malla deformada, sin el la mano
+# queda a 2-4 mm de la cara (se mete), y con el la holgura minima es de 3.4 cm en todo el
+# trayecto sin despegar las manos de las copas en los frames de agarre (u=0 y u=1).
+WRIST_OFF = lambda s, u: Vector((SX[s] * -(0.058 + 0.030 * math.sin(math.pi * u)), 0.0, -0.08))
+HAND_DIR = lambda s: (SX[s] * 0.10, 0.30, 0.95)   # mano arriba y adelante, palma hacia la copa
+
+
+def smooth(u):
+    return u * u * (3 - 2 * u)
+
+
+def hands_to_cups(f, u_hp):
+    """Coloca ambas manos en las copas con headphones en el estado u_hp y keyframea todo.
+
+    Resuelve la IK con el torso y la cabeza en SIT: durante el cabeceo (f60-152) las manos
+    estan en el teclado y no se recalculan, asi que la mezcla sigue siendo coherente.
+    """
+    poses.apply(arm, SIT)
+    eul, loc = hp_state(u_hp)
+    key(HP, f, euler=eul, loc=loc)
+    for s in 'LR':
+        cw = cup_world(s, u_hp)
+        key_pose(f, reach(s, cw + WRIST_OFF(s, u_hp), HAND_DIR(s)))
+
+
+def key_arms_sit(f):
+    for b in ARM_BONES:
+        key(b, f, SIT[b])
+
+
+def nod(f, env):
+    t = (f - 60) / BEAT * 2 * math.pi
     pulse = max(0.0, math.sin(t)) ** 1.5                            # golpe hacia abajo
-    nod = -8 + env * (30 * pulse - 8)                               # env=0 -> SIT (-8)
-    key(HEAD, f, rot(HEAD, nod, side_deg=env * 5.0 * math.sin(t / 2)))
+    nod_deg = -8 + env * (30 * pulse - 8)                           # env=0 -> SIT (-8)
+    key(HEAD, f, rot(HEAD, nod_deg, side_deg=env * 5.0 * math.sin(t / 2)))
     key(NECK, f, neck(4 + env * 6.0 * pulse, env * 2.5 * math.sin(t / 2)))
     key('spine003', f, rot('spine003', 6 + env * 4.5 * math.sin(t)))
     key('shoulderL', f, rot('shoulderL', env * 6.0 * math.sin(t)))
     key('shoulderR', f, rot('shoulderR', env * 6.0 * math.sin(t + math.pi)))
+
+
+act = new_action('vibe', VIBE_BONES)
+key(HP, 1, euler=(0, 0, 0), loc=(0, 0, 0))
+# fase 1: teclado -> copas en el cuello (bezier entre el SIT de f1 y las copas de f20)
+key_arms_sit(1)
+hands_to_cups(20, 0.0)
+# fase 2: subir los audifonos
+for f, u in ((26, 0.15), (32, 0.45), (38, 0.8), (44, 1.0)):
+    hands_to_cups(f, smooth(u))
+# fase 3: ajuste
+hands_to_cups(52, 1.0)
+# fase 4: manos al teclado (los audifonos se quedan puestos)
+key_arms_sit(76)
+key(HP, 76, euler=HP_ON[0], loc=HP_ON[1])
+# fase 5: cabeceo (la cabeza vuelve a SIT justo antes de la fase 6). El key de brazos en 152
+# es imprescindible: sin el, el bezier entre f76 y f168 arrastraria las manos hacia las copas
+# durante los 92 frames del cabeceo.
+for f in range(60, 153, 2):
+    env = min(1.0, (f - 60) / 14.0) * min(1.0, (152 - f) / 14.0)    # fade in/out
+    nod(f, env)
+key_arms_sit(152)
+key(HP, 152, euler=HP_ON[0], loc=HP_ON[1])
+# fase 6: manos a las copas (en la cabeza)
+hands_to_cups(168, 1.0)
+# fase 7: bajar los audifonos
+for f, u in ((174, 0.8), (180, 0.45), (186, 0.15), (192, 0.0)):
+    hands_to_cups(f, smooth(u))
+# fase 8: manos al teclado, todo en SIT
+key_arms_sit(216)
+key(HP, 216, euler=(0, 0, 0), loc=(0, 0, 0))
+for b in (HEAD, NECK, 'spine003'):
+    for f in (1, 58, 154, 216):
+        key(b, f, SIT[b])
+for b in ('shoulderL', 'shoulderR'):
+    for f in (1, 58, 154, 216):
+        key(b, f, (0, 0, 0))
 lids(1, 0)
-lids(7, 70)
-lids(112, 70)
-lids(120, 0)
-finish(act, 120, cyclic=False)
+lids(60, 0)
+lids(66, 70)
+lids(146, 70)
+lids(152, 0)
+lids(216, 0)
+finish(act, VIBE_LEN, cyclic=False)
 
 
 # --------------------------------------------------------------------------- 6) lookAround

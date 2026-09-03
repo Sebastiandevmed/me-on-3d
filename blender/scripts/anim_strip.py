@@ -26,6 +26,11 @@ def reset_pose():
         pb.rotation_euler = (0.0, 0.0, 0.0)
     for b in ('eyebrow_L', 'eyebrow_R'):
         arm.pose.bones[b].location = (0.0, 0.0, 0.0)
+    hp = arm.pose.bones.get('headphones')       # solo `vibe` lo anima: sin esto los demas
+    if hp:                                      # clips saldrian con los audifonos puestos
+        hp.rotation_mode = 'XYZ'
+        hp.rotation_euler = (0.0, 0.0, 0.0)
+        hp.location = (0.0, 0.0, 0.0)
 
 
 P = lambda n: [round(v, 3) for v in (arm.matrix_world @ arm.pose.bones[n].head)]
@@ -48,8 +53,10 @@ BODY = ((0.85, 1.75, 1.34), (0.0, 0.05, 1.16), 50)
 FACE = ((0.22, 0.90, 1.50), (0.0, 0.10, 1.585), 58)
 
 SHOTS = [
-    ('vibe', BODY, (16, 20, 31, 35, 46, 50)),
-    ('vibeface', FACE, (16, 20, 31, 35, 46, 50), 'vibe'),
+    # vibe v2 (216 f): copas en el cuello (20), audifonos a media altura (32), puestos (44),
+    # manos de vuelta al teclado (76), cabeceo (100), manos a las copas (168), bajada (186).
+    ('vibe', BODY, (1, 20, 32, 44, 76, 100, 168, 186, 216)),
+    ('vibeface', FACE, (20, 32, 44, 100, 180, 192), 'vibe'),
     ('typing', BODY, (1, 13, 25, 37)),
     ('introAnimation', BODY, (1, 18, 36, 52, 72)),
     ('idle', BODY, (1, 13, 25, 37, 49)),

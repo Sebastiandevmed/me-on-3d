@@ -49,8 +49,8 @@ MAX_TRIS = 80000
 SCREENS = ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop')
 SCREEN_EMISSION = 1.0
 TRACKS = ['introAnimation', 'typing', 'idle', 'Blink', 'browup', 'vibe', 'lookAround']
-NODES = ['spine006', 'screen_left', 'screen_center', 'screen_right', 'screen_laptop',
-         'rgb_bar_L', 'rgb_bar_R', 'earring_L1', 'earring_R2']
+NODES = ['spine006', 'headphones', 'screen_left', 'screen_center', 'screen_right',
+         'screen_laptop', 'rgb_bar_L', 'rgb_bar_R', 'earring_L1', 'earring_R2']
 KEEP_EMPTIES = ('seat_anchor', 'moto_anchor', 'moto_mini')
 POSE_BONES = ('upper_armL', 'handL')     # huesos que 'idle' no anima: deben exportar posados
 POSE_TOL = 0.9948                         # |dot| de cuaterniones: ~5.8 grados
@@ -308,6 +308,7 @@ check(not (clip_bones.get('typing', set()) & SPINE_BONES), 'typing no toca colum
 check(not (clip_bones.get('idle', set()) & {'upper_armL', 'upper_armR', 'handL', 'handR'}), 'idle no toca brazos')
 check(clip_bones.get('Blink', set()) == EYELIDS, 'Blink solo parpados')
 check({n for n, b in clip_bones.items() if 'spine006' in b} == {'vibe', 'lookAround'}, 'solo vibe/lookAround mueven spine006')
+check({n for n, b in clip_bones.items() if 'headphones' in b} == {'vibe'}, 'solo vibe mueve headphones')
 
 if not ok:
     common.fail('verificacion del GLB')

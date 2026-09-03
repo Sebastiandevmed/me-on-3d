@@ -6,7 +6,7 @@ import bpy, common
 
 arm = bpy.data.objects['Armature']
 NEED = {'introAnimation': 72, 'typing': 48, 'idle': 96, 'Blink': 240,
-        'browup': 18, 'vibe': 120, 'lookAround': 96}
+        'browup': 18, 'vibe': 216, 'lookAround': 96}
 HEAD = 'spine006'
 # Huesos que `typing` tiene permitido tocar (este rig no tiene huesos de dedos).
 TYPING_OK = {'shoulderL', 'shoulderR', 'upper_armL', 'upper_armR',
@@ -16,6 +16,9 @@ HEAD_OK = {'vibe', 'lookAround'}
 # idle es la base continua: solo columna/cuello, para que typing se superponga sin
 # escribir sobre los mismos huesos.
 IDLE_OK = {'spine001', 'spine002', 'spine003', 'spine005'}
+# vibe v2: torso/cabeza + brazos (se pone y se quita los audifonos) + la pieza.
+VIBE_OK = {'spine006', 'spine005', 'spine003', 'shoulderL', 'shoulderR', 'eyelidL', 'eyelidR',
+           'upper_armL', 'upper_armR', 'forearmL', 'forearmR', 'handL', 'handR', 'headphones'}
 # Clips en bucle: deben ser continuos (modificador CYCLES o primer valor == ultimo).
 LOOPS = {'typing', 'idle', 'Blink'}
 
@@ -114,5 +117,14 @@ if not {'eyelidL', 'eyelidR'} <= bones_in(bpy.data.actions['vibe']):
     common.fail('vibe deberia cerrar los ojos (sin parpados)')
 if not {'eyebrow_L', 'eyebrow_R'} <= bones_in(bpy.data.actions['browup']):
     common.fail('browup sin cejas')
+
+extra = bones_in(bpy.data.actions['vibe']) - VIBE_OK
+if extra:
+    common.fail(f'vibe toca huesos inesperados: {sorted(extra)}')
+if 'headphones' not in bones_in(bpy.data.actions['vibe']):
+    common.fail('vibe no mueve headphones')
+for n in NEED:
+    if n != 'vibe' and 'headphones' in bones_in(bpy.data.actions[n]):
+        common.fail(f'{n} mueve headphones; solo vibe puede')
 
 print('CHECK_ANIM OK')
