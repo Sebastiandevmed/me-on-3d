@@ -162,11 +162,13 @@ def cup_world(side, u):
     """Centro de la copa `side` en el mundo con el hueso headphones en el estado u (0..1).
     Requiere que el resto de la pose (torso, cabeza) ya este aplicada.
 
-    `cup_offset_rest/head` estan los dos en la trama de REPOSO del hueso (add_headphones.py los
-    midio con `A.inverted() @ centro`, A = matrix_world @ bone.matrix_local): la diferencia
-    entre los dos estados ya va dentro del offset. Por eso hay que transformarlos con la trama
-    de reposo tal como la lleva el padre (spine006), es decir quitandole el basis del propio
-    hueso; con `pb.matrix @ off` el giro de la pieza se aplicaria dos veces.
+    `cup_offset_rest` esta en la trama de REPOSO del hueso (add_headphones.py lo midio con
+    `A.inverted() @ centro`, A = matrix_world @ bone.matrix_local), asi que basta con pasarlo por
+    `pb.matrix`, que ya lleva dentro el basis del estado u que acaba de poner `hp_state`.
+    `cup_offset_head` del JSON es redundante: es exactamente `basis_on @ cup_offset_rest`
+    (verificado, error 6e-5 m). Interpolarlos linealmente seria recorrer la CUERDA de un arco de
+    70 grados y radio 0.134 m: 2.2 cm de error en u = 0.5, justo en los frames de agarre a media
+    altura.
     """
     pb = arm.pose.bones[HP]
     eul, loc = hp_state(u)
@@ -174,9 +176,7 @@ def cup_world(side, u):
     pb.rotation_euler = eul
     pb.location = loc
     bpy.context.view_layer.update()
-    frame = pb.matrix @ pb.matrix_basis.inverted()
-    off = lerp3(HP_DATA['cup_offset_rest'][side], HP_DATA['cup_offset_head'][side], u)
-    return arm.matrix_world @ (frame @ Vector(off))
+    return arm.matrix_world @ (pb.matrix @ Vector(HP_DATA['cup_offset_rest'][side]))
 
 
 def seg_len(parent, child):
@@ -365,13 +365,16 @@ finish(act, 18, cyclic=False)
 VIBE_BONES = [HEAD, NECK, 'spine003', 'shoulderL', 'shoulderR'] + LIDS + ARM_BONES + [HP]
 VIBE_LEN = 216
 BEAT = 15.0
-# Muneca = centro de la copa + WRIST_OFF: hacia AFUERA (L esta en -X, asi que afuera = -X
-# para L) y 8 cm abajo. El termino en sin(pi*u) abre las manos 3 cm mas a mitad del recorrido,
-# cuando las copas pasan rozando la mandibula: medido sobre la malla deformada, sin el la mano
-# queda a 2-4 mm de la cara (se mete), y con el la holgura minima es de 3.4 cm en todo el
-# trayecto sin despegar las manos de las copas en los frames de agarre (u=0 y u=1).
-WRIST_OFF = lambda s, u: Vector((SX[s] * -(0.058 + 0.030 * math.sin(math.pi * u)), 0.0, -0.08))
-HAND_DIR = lambda s: (SX[s] * 0.10, 0.30, 0.95)   # mano arriba y adelante, palma hacia la copa
+# Muneca = centro de la copa + WRIST_OFF: 4 cm hacia AFUERA (L esta en -X, asi que afuera = -X
+# para L) y 8 cm abajo, como sujetando la copa por debajo. HAND_DIR inclina la mano hacia
+# AFUERA: este rig no tiene huesos de dedos y `poses.aim()` no controla el giro sobre el eje del
+# hueso, asi que con la mano apuntando hacia adentro (el (+0.25,...) del borrador) la ANCHURA de
+# la palma cruza por delante del pomulo y lo atraviesa. Medido sobre la malla deformada en
+# u = 0 / 0.2 / 0.43 / 0.7 / 1: holgura mano-cara 5.3 / 4.4 / 2.8 / 3.1 / 5.5 cm, y el vertice
+# de la mano mas cercano al centro de la copa se queda a 1.3 / 1.1 / 0.7 / 2.3 / 4.2 cm (radio
+# de la copa: 4.5 cm), o sea la mano toca la copa en todo el recorrido.
+WRIST_OFF = lambda s: Vector((SX[s] * -0.04, 0.0, -0.08))
+HAND_DIR = lambda s: (SX[s] * -0.20, 0.30, 0.94)
 
 
 def smooth(u):
@@ -389,7 +392,7 @@ def hands_to_cups(f, u_hp):
     key(HP, f, euler=eul, loc=loc)
     for s in 'LR':
         cw = cup_world(s, u_hp)
-        key_pose(f, reach(s, cw + WRIST_OFF(s, u_hp), HAND_DIR(s)))
+        key_pose(f, reach(s, cw + WRIST_OFF(s), HAND_DIR(s)))
 
 
 def key_arms_sit(f):
