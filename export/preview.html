@@ -43,7 +43,7 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 
 const info = document.getElementById('info');
 const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '',
-  headQ: () => follow.head && follow.head.quaternion.toArray(), chestQ: () => follow.chest && follow.chest.quaternion.toArray(), hpQ: () => follow.hp && follow.hp.quaternion.toArray(),
+  headQ: () => follow.head && follow.head.quaternion.toArray(), neckQ: () => follow.neck && follow.neck.quaternion.toArray(), chestQ: () => follow.chest && follow.chest.quaternion.toArray(), hpQ: () => follow.hp && follow.hp.quaternion.toArray(),
   barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
@@ -132,6 +132,7 @@ loader.load('avatar.glb', (gltf) => {
     if (/^screen_/.test(o.name) && o.isMesh) screens.push(o);
     if (/^rgb_bar_/.test(o.name) && o.isMesh) bars.push(o);
     if (o.name === 'spine006') follow.head = o;
+    if (o.name === 'spine005') follow.neck = o;
     if (o.name === 'spine003') follow.chest = o;
     if (o.name === 'headphones') follow.hp = o;
     if (o.name === 'Body') character = o;
@@ -159,13 +160,16 @@ loader.load('avatar.glb', (gltf) => {
   });
 }, undefined, (err) => { console.error('avatar.glb: ' + (err.message || err)); });
 
-// ---- seguimiento de cursor: la cabeza (spine006) MIRA al punto 3D del cursor (a la profundidad de
-// la cabeza), el pecho (spine003) acompana el 30 % del yaw y el nodo headphones (hijo de la cabeza,
+// ---- seguimiento de cursor: la cabeza MIRA al punto 3D del cursor (a la profundidad de la cabeza).
+// El giro se reparte por la columna para que no parezca una cabeza rigida sobre un cuello tieso:
+// pecho (spine003) 30 % del yaw, cuello (spine005) 25 % del yaw y 30 % del pitch, cabeza (spine006)
+// el resto. Como cada hueso es hijo del anterior, las partes se suman en mundo. El nodo headphones (hijo de la cabeza,
 // audifonos colgando del cuello) cancela el giro para no columpiarse. Se aplica DESPUES del mixer y
 // se deshace antes del siguiente update (los clips base no escriben estos huesos cada frame).
 const YAW_MAX = Math.PI / 4, PITCH_UP = Math.PI / 7.2, PITCH_DOWN = Math.PI / 9;   // 45 / 25 / 20 grados
-const follow = { head: null, chest: null, hp: null };            // Object3D
-const saved = { head: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
+const SHARE = { chest: { yaw: 0.3, pitch: 0 }, neck: { yaw: 0.25, pitch: 0.3 } };   // la cabeza pone lo que falta hasta 1
+const follow = { head: null, neck: null, chest: null, hp: null };   // Object3D
+const saved = { head: null, neck: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
 const look = { yaw: 0, pitch: 0 };
 let followWeight = 0;
 const undoFollow = () => { for (const k in follow) if (follow[k] && saved[k]) follow[k].quaternion.copy(saved[k]); };
@@ -197,11 +201,18 @@ function applyHeadFollow() {
     look.pitch += (Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch)) - look.pitch) * 0.08;
   }
   if (followWeight < 0.001) return;
-  qPitch.setFromAxisAngle(AX_X, look.pitch);
-  if (follow.chest) { qTmp.setFromAxisAngle(AX_Y, look.yaw * 0.3); worldRotate(follow.chest, qTmp, followWeight); }
-  // el pecho ya giro: la cabeza aplica el resto (el giro de mundo se compone igual, la cabeza es hija)
+  let yawLeft = 1, pitchLeft = 1;
+  for (const k of ['chest', 'neck']) {
+    if (!follow[k]) continue;
+    qPitch.setFromAxisAngle(AX_X, look.pitch * SHARE[k].pitch);
+    qTmp.setFromAxisAngle(AX_Y, look.yaw * SHARE[k].yaw).multiply(qPitch);
+    worldRotate(follow[k], qTmp, followWeight);
+    yawLeft -= SHARE[k].yaw; pitchLeft -= SHARE[k].pitch;
+  }
+  // pecho y cuello ya giraron: la cabeza aplica el resto (el giro de mundo se compone igual, la cabeza es hija)
   qHeadOld.copy(follow.head.quaternion);
-  qTmp.setFromAxisAngle(AX_Y, look.yaw * 0.7).multiply(qPitch);
+  qPitch.setFromAxisAngle(AX_X, look.pitch * pitchLeft);
+  qTmp.setFromAxisAngle(AX_Y, look.yaw * yawLeft).multiply(qPitch);
   worldRotate(follow.head, qTmp, followWeight);
   if (follow.hp) {   // conservar el mundo: hp_local = head_new^-1 * head_old * hp_old
     qTmp.copy(follow.head.quaternion).invert().multiply(qHeadOld);

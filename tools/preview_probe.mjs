@@ -43,18 +43,21 @@ let loaded = false;
 for (let i = 0; i < 60 && !loaded; i++) { await sleep(500); loaded = await ev('!!(window.__status && __status.loaded && __status.env)'); }
 await sleep(4500);                                  // intro (3 s) + fundido de pantallas
 await mv(720, 420); await sleep(1500);
-const status = await ev('JSON.stringify({loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,clips:__status.clips(),headQ:__status.headQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
+const status = await ev('JSON.stringify({loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
 console.log('PROBE status', status);
 const st = JSON.parse(status);
 await shot('preview_shot.png');
 await mv(40, 300); await sleep(2000);
 const headLeft = await ev('JSON.stringify(__status.headQ())');
+const neckLeft = await ev('JSON.stringify(__status.neckQ())');
 console.log('PROBE headQ izquierda', headLeft);
 // distancia euclidea entre el cuaternion de la cabeza en el centro y a la izquierda: el
 // seguimiento del cursor gira ~0.2-0.3 en el componente y, asi que < 0.1 = no se movio.
 const qd = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
 const headDist = (st.headQ && headLeft) ? qd(st.headQ, JSON.parse(headLeft)) : 0;
 console.log('PROBE headQ dist', headDist.toFixed(4));
+const neckDist = (st.neckQ && neckLeft) ? qd(st.neckQ, JSON.parse(neckLeft)) : 0;
+console.log('PROBE neckQ dist', neckDist.toFixed(4));
 await shot('preview_shot_look.png');
 await mv(720, 420); await ev('window.__vibe && window.__vibe(); 1'); await sleep(2200);
 console.log('PROBE vibe', await ev('JSON.stringify({ex:__status.exclusive,clips:__status.clips(),hpQ:__status.hpQ()})'));
@@ -72,6 +75,7 @@ if (st.hpQ === null || st.hpQ === undefined) fails.push('hpQ es null: el GLB no 
 if (st.shadows !== true) fails.push(`shadows=${st.shadows} (esperado true)`);
 if (st.lights !== 9) fails.push(`lights=${st.lights} (esperado 9)`);
 if (!(headDist >= 0.1)) fails.push(`la cabeza no sigue al cursor: dist(headQ centro, izquierda)=${headDist.toFixed(4)} < 0.1`);
+if (!(neckDist >= 0.03)) fails.push(`el cuello no acompana a la cabeza: dist(neckQ centro, izquierda)=${neckDist.toFixed(4)} < 0.03`);
 if (fails.length) { for (const f of fails) console.error('PROBE FAIL', f); process.exit(1); }
 console.log('PROBE OK');
 process.exit(0);

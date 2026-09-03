@@ -91,7 +91,7 @@ Hallazgo del usuario en el visor real: al mirar al cursor la cara se deformaba, 
 
 Arreglo: `blender/scripts/fix_head_weights.py` (va justo después de `add_headphones.py`, antes de `check_rig.py`). Por encima de la barbilla (z >= base de `spine006` + 5 mm) todo el peso del cuello pasa a la cabeza; entre 45 mm por debajo y ese punto hay una rampa suave para que la garganta siga siendo cuello. Idempotente con `Body['head_weights_fixed']`. `--probe` renderiza la cabeza girada (yaw 40°, pitch -15°) con los pesos viejos para ver el defecto (`generated/renders/head_weights_before_*.png`); la ejecución normal renderiza la misma pose ya arreglada (`head_weights_after_*.png`). Medido: cuello en barbilla..+6 cm 15.3 % → 0 %, en +6..+20 cm 5.4 % → 0 %.
 
-Regenerado después: `animate.py`, `check_anim.py`, `assemble.py`, `export_glb.py`, `glb_inspect.py` y `preview_probe.mjs` (todo OK; GLB 2665 KB / 49 390 tris; `preview_shot_look.png` ya sin el bulto bajo la barbilla). No se tocó `export/preview.html`.
+Regenerado después: `animate.py`, `check_anim.py`, `assemble.py`, `export_glb.py`, `glb_inspect.py` y `preview_probe.mjs` (todo OK; GLB 2665 KB / 49 390 tris; `preview_shot_look.png` ya sin el bulto bajo la barbilla). Después, a petición del usuario, el visor reparte el giro por la columna (`SHARE` en `export/preview.html`): pecho 30 % del yaw, cuello (`spine005`) 25 % del yaw y 30 % del pitch, cabeza el resto; `preview_probe.mjs` ahora también exige que `neckQ` cambie con el cursor (dist >= 0.03; medido 0.19).
 
 ## Créditos Higgsfield
 
