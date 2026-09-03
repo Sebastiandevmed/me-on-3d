@@ -48,6 +48,17 @@ def inside(pts, xr, yr, zr):
     return sum(1 for p in pts if xr[0] <= p.x <= xr[1] and yr[0] <= p.y <= yr[1] and zr[0] <= p.z <= zr[1])
 
 
+# Cajas (rango x, rango y, rango z) de las piezas con las que el personaje no debe intersectar.
+# Las usa main() y tambien assemble.py (Task 11); 'asiento' solo recibe tela (ruedo/pantalon).
+BOXES = {
+    'escritorio':  ((-1.0, 1.0), (0.75, 1.55), (0.7225, 0.7575)),   # tablero del escritorio
+    'base_laptop': ((-0.16, 0.16), (0.87, 1.09), (0.758, 0.770)),   # base del laptop
+    'tapa_laptop': ((-0.16, 0.16), (1.05, 1.11), (0.77, 0.99)),     # tapa/pantalla del laptop
+    'respaldo':    ((-0.25, 0.25), (0.28, 0.36), (0.48, 1.08)),     # respaldo de la silla
+    'asiento':     ((-0.25, 0.25), (0.30, 0.80), (0.39, 0.47)),     # volumen del asiento
+}
+
+
 def main():
     arm, bodies = append_character()
     poses.apply(arm, poses.SIT)
@@ -61,11 +72,11 @@ def main():
     minz = min(p.z for p in pts)
     # nalgas/muslos sobre la huella del asiento: el volumen del asiento es z=0.390..0.470.
     # Lo que cae dentro es el ruedo del hoodie y el pantalon ancho colgando (tela), no el cuerpo.
-    seat_box = inside(pts, (-0.25, 0.25), (0.30, 0.80), (0.39, 0.47))
-    desk = inside(pts, (-1.0, 1.0), (0.75, 1.55), (0.7225, 0.7575))      # tablero del escritorio
-    lap = inside(pts, (-0.16, 0.16), (0.87, 1.09), (0.758, 0.770))       # base del laptop
-    lid = inside(pts, (-0.16, 0.16), (1.05, 1.11), (0.77, 0.99))         # tapa/pantalla del laptop
-    back = inside(pts, (-0.25, 0.25), (0.28, 0.36), (0.48, 1.08))        # respaldo de la silla
+    seat_box = inside(pts, *BOXES['asiento'])
+    desk = inside(pts, *BOXES['escritorio'])
+    lap = inside(pts, *BOXES['base_laptop'])
+    lid = inside(pts, *BOXES['tapa_laptop'])
+    back = inside(pts, *BOXES['respaldo'])
     print('CHECK pies_min_z', round(minz, 4), '(objetivo ~0)')
     hip_z = (arm.matrix_world @ arm.pose.bones['thighL'].head).z
     print('CHECK cadera_sobre_asiento', round(hip_z - 0.470, 4), 'm  verts_dentro_del_asiento', seat_box,

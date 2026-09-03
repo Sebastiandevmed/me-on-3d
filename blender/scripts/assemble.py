@@ -10,6 +10,8 @@ import sys, os, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, common, poses
 from mathutils import Vector
+# Helpers de la prueba de sentado (Task 7): sit_test.py tiene guard __main__, importarlo no corre la prueba.
+from sit_test import seat_on_anchor, world_verts, inside, BOXES
 
 MOTO_LENGTH = 0.25          # largo de la moto de juguete (m)
 MOTO_YAW_DEG = -30.0        # giro en Z para que se lea desde la camara de aprobacion
@@ -35,34 +37,9 @@ poses.apply(arm, poses.SIT)          # sin frame: no crea keyframes
 bpy.context.view_layer.update()
 
 
-def seat_on_anchor(arm, anchor_name='seat_anchor'):
-    """Copiado de sit_test.py (Task 7, verificado): el punto medio de las cabezas de
-    thighL/thighR (la cadera) va a seat_anchor + SEAT_LIFT. Mover 'spine' al anchor
-    (como decia el brief) deja el cuerpo demasiado bajo, metido en el asiento."""
-    anchor = bpy.data.objects[anchor_name]
-    bpy.context.view_layer.update()
-    hips = (arm.matrix_world @ arm.pose.bones['thighL'].head +
-            arm.matrix_world @ arm.pose.bones['thighR'].head) / 2
-    target = Vector((anchor.location.x, anchor.location.y, anchor.location.z + poses.SEAT_LIFT))
-    arm.location += target - hips
-    bpy.context.view_layer.update()
-    return arm.location.copy()
-
-
-def world_verts(objs):
-    dg = bpy.context.evaluated_depsgraph_get()
-    pts = []
-    for b in objs:
-        ev = b.evaluated_get(dg); me = ev.to_mesh()
-        pts += [ev.matrix_world @ v.co for v in me.vertices]
-        ev.to_mesh_clear()
-    return pts
-
-
-def inside(pts, xr, yr, zr):
-    return sum(1 for p in pts if xr[0] <= p.x <= xr[1] and yr[0] <= p.y <= yr[1] and zr[0] <= p.z <= zr[1])
-
-
+# Colocacion: seat_on_anchor() (sit_test.py, verificado en Task 7) lleva el punto medio de las
+# cabezas de thighL/thighR (la cadera) a seat_anchor + SEAT_LIFT. Mover 'spine' al anchor
+# (como decia el brief) deja el cuerpo demasiado bajo, metido en el asiento.
 def character_checks(tag):
     """Mismos chequeos numericos de sit_test.py: 0 vertices del personaje dentro del
     escritorio, base/tapa del laptop y respaldo. Dentro del asiento solo cae tela
@@ -71,11 +48,8 @@ def character_checks(tag):
     P = lambda n: [round(v, 3) for v in (arm.matrix_world @ arm.pose.bones[n].head)]
     print(f'POSE[{tag}] hip', P('thighL'), P('thighR'), 'knee', P('shinL'), 'ankle', P('footL'),
           'wrist', P('handL'), P('handR'), 'head', P('spine006'))
-    desk = inside(pts, (-1.0, 1.0), (0.75, 1.55), (0.7225, 0.7575))      # tablero del escritorio
-    lap = inside(pts, (-0.16, 0.16), (0.87, 1.09), (0.758, 0.770))       # base del laptop
-    lid = inside(pts, (-0.16, 0.16), (1.05, 1.11), (0.77, 0.99))         # tapa/pantalla del laptop
-    back = inside(pts, (-0.25, 0.25), (0.28, 0.36), (0.48, 1.08))        # respaldo de la silla
-    seat_box = inside(pts, (-0.25, 0.25), (0.30, 0.80), (0.39, 0.47))    # volumen del asiento
+    desk, lap, lid, back, seat_box = (inside(pts, *BOXES[k]) for k in
+                                      ('escritorio', 'base_laptop', 'tapa_laptop', 'respaldo', 'asiento'))
     minz = min(p.z for p in pts)
     hip_z = (arm.matrix_world @ arm.pose.bones['thighL'].head).z
     print(f'CHECK[{tag}] verts_en_escritorio', desk, 'en_base_laptop', lap, 'en_tapa_laptop', lid,
@@ -149,8 +123,16 @@ if os.path.exists(hdr):
     print('HDR mundo', hdr)
 
 # ------------------------------------------------------------------ render de aprobacion
-for m in ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop'):
-    bpy.data.materials[m].node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 2.5
+# El estado de render (pantallas encendidas, solo 'typing' activa, frame 12) es temporal:
+# se captura antes, se restaura despues, y avatar.blend queda como asset neutro
+# (Task 12 decide el estado de exportacion explicitamente).
+SCREENS = ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop')
+emis = lambda m: bpy.data.materials[m].node_tree.nodes['Principled BSDF'].inputs['Emission Strength']
+prev_emis = {m: emis(m).default_value for m in SCREENS}
+prev_mute = {t.name: t.mute for t in arm.animation_data.nla_tracks}
+prev_action = arm.animation_data.action
+prev_frame = sc.frame_current
+for m in SCREENS: emis(m).default_value = 2.5
 arm.animation_data.action = None
 for t in arm.animation_data.nla_tracks:
     t.mute = (t.name != 'typing')
@@ -161,6 +143,16 @@ name = (common.args() or ['assembled_v1'])[0]
 common.render(os.path.join(common.RENDERS, f'{name}.png'), res=(1600, 900), samples=48)
 print('TOTAL_TRIS', common.scene_tri_count())
 print('INTERSECCIONES', bad, '(objetivo 0)')
+# restaurar el estado previo al render
+for m in SCREENS: emis(m).default_value = prev_emis[m]
+for t in arm.animation_data.nla_tracks:
+    t.mute = prev_mute[t.name]
+arm.animation_data.action = prev_action
+sc.frame_set(1 if prev_frame == 12 else prev_frame)
+bpy.context.view_layer.update()
+print('NEUTRAL frame', sc.frame_current, 'action', arm.animation_data.action,
+      'mute', {t.name: t.mute for t in arm.animation_data.nla_tracks},
+      'emision', {m: round(emis(m).default_value, 2) for m in SCREENS})
 # rutas relativas (HDR, texturas) para que avatar.blend funcione si se mueve el repo
 bpy.ops.file.make_paths_relative()
 common.save(os.path.join(common.BLEND_DIR, 'avatar.blend'))
