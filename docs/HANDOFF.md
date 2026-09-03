@@ -37,7 +37,9 @@ Sebastián Escobar, desarrollador web de Medellín (Campo Valdés). Moda urbana,
 | 5 Malla rigueada Meshy | ✅ v2 APROBADA (generated/meshy/character_rigged.glb, 82.9k tris → 38k en Blender) | espalda sin estampado (aceptado) |
 | 6 Importar personaje (import_character.py, check_rig.py) | ✅ completa | autodetección de orientación con el hueso headfront (rota 180° si mira a -Y; el importador glTF deja el armature en QUATERNION, por eso se fuerza rotation_mode XYZ); cámara de control en +Y; check_rig valida headfront.y > spine006.y |
 | 6b Logo en el pecho (apply_chest_logo.py) | ✅ completa | borra el "SE" por texel (componentes conexos en espacio mundo, excluye cordones/cuello) y compone `refs/logo.png` como estampado CLARO (luminancia invertida, brillo morado conservado) porque el hoodie es casi negro. Render: generated/renders/chest_logo.png. Variante oscura de comparación: chest_logo_dark.png (`-- --dark`). Es idempotente: parte siempre de generated/character_texture_original.png. **Rerun obligatorio tras cada import_character.py.** |
-| 7-9, 11-13 Blender (pose, cara, animaciones, ensamblaje, export, visor) | ⏳ | |
+| 7 Pose sentada (pose_probe.py, poses.py, sit_test.py) | ✅ completa (5128355) | ejes calibrados (shin = (0,-1), no (0,1)); brazos con eulers horneados por `poses.aim()`; render de aprobación generated/renders/sit_v_final.png (+_legs, _hands) enviado al usuario |
+| 8 Párpados, cejas, candongas (add_face_parts.py) | 🔄 subagente en curso | rejilla y cámaras espejadas a +Y |
+| 9, 11-13 Blender (animaciones, ensamblaje, export, visor) | ⏳ | |
 | 10 Moto + ventana Medellín (Higgsfield) | ⏳ | |
 | 14 Cierre / README | ⏳ | |
 
@@ -55,5 +57,6 @@ Saldo inicial 186. Gastados: 80 (10 en láminas + 35 malla v1 + 35 malla v2). Lo
 ## Pendiente del usuario
 
 - Aprobar el logo en el pecho (generated/renders/chest_logo.png) — versión clara por defecto; si prefiere la tinta oscura original: chest_logo_dark.png.
+- Aprobar la pose sentada (generated/renders/sit_v_final.png).
 - Opcional: dejar `refs/code/*.ts` para la pantalla de código (si no, código de ejemplo). Logo ya entregado.
 - Fotos definitivas de cara (opcional) para afinar el parecido al final (Tarea 14).
