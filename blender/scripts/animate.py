@@ -62,8 +62,8 @@ def fcurves_of(act):
 
 def key(bone, frame, euler=None, loc=None):
     pb = arm.pose.bones.get(bone)
-    if pb is None:      # p.ej. huesos de dedos: este rig no los tiene
-        return
+    if pb is None:      # un nombre mal escrito perderia el canal en silencio
+        raise KeyError(f'key(): el hueso {bone!r} no existe en {arm.name}')
     pb.rotation_mode = 'XYZ'
     if euler is not None:
         pb.rotation_euler = euler
@@ -193,9 +193,12 @@ finish(act, 48, cyclic=True)
 
 
 # --------------------------------------------------------------------------- 2) idle
-# Respiracion sutil en la columna (2 ciclos en 96 frames) + flotacion minima de los brazos.
+# Respiracion sutil en la columna (2 ciclos en 96 frames). SOLO spine001/002/003/005: los
+# brazos siguen al torso como hijos, y asi `typing` puede superponerse en el reproductor
+# web sin que el mixer promedie escrituras sobre los mismos huesos (idle = base continua,
+# typing encima con huesos disjuntos; vibe/lookAround en exclusiva con idle fundido).
 # El cuello contrarresta para que la cabeza (no animada) quede quieta.
-IDLE_BONES = SPINE + [NECK] + ARM_BONES
+IDLE_BONES = SPINE + [NECK]
 act = new_action('idle', IDLE_BONES)
 
 
@@ -210,13 +213,7 @@ def idle_torso(t):
 
 for f in range(1, 98, 8):                       # 1..97; el 97 repite el 1
     t = (f - 1) / 96.0 * 2 * 2 * math.pi        # dos respiraciones
-    torso = idle_torso(t)
-    key_pose(f, torso)
-    key_pose(f, solve_arms(
-        torso=torso,
-        fore=lambda s: (SX[s] * 0.13, 0.99, 0.02 + 0.025 * math.sin(t + 0.6)),
-        hand=lambda s: (SX[s] * 0.05, 0.995, 0.04 * math.sin(t + 0.9)),
-    ))
+    key_pose(f, idle_torso(t))
 finish(act, 96, cyclic=True)
 
 
@@ -254,10 +251,11 @@ finish(act, 18, cyclic=False)
 # Cabeceo de rap con los OJOS CERRADOS: 8 tiempos de 15 frames (96 BPM) en 120 frames.
 # La cabeza cae en el golpe y sube entre golpes; hombros y spine003 acompanan.
 # Amplitud subida (feedback del controlador: el cabeceo original -8.5..0.5 grados era
-# casi imperceptible en una tira de 6 frames). Ahora spine006 oscila entre -15 (levantada,
-# entre golpes) y +15 (golpe abajo): swing de 30 grados, ~23 por debajo de SIT (-8); el
-# cuello suma 6 grados mas en el golpe. Envolvente de 14 frames al inicio y al final para
-# que el clip empiece y termine cerca de SIT y sea encadenable en bucle.
+# casi imperceptible en una tira de 6 frames). Ahora spine006 oscila entre -16 (levantada,
+# entre golpes) y +14 (golpe abajo): swing de 30 grados, 22 por debajo de SIT (-8); el
+# cuello suma 6 grados mas en el golpe. Envolvente de 14 frames al inicio y al final: con
+# env=0 la cabeza cae EXACTAMENTE en SIT (-8), asi encadena desde idle/typing sin salto.
+# Los ojos abren en f1 y f120 (cerrados f7..f112) por la misma razon.
 VIBE_BONES = [HEAD, NECK, 'spine003', 'shoulderL', 'shoulderR'] + LIDS
 act = new_action('vibe', VIBE_BONES)
 BEAT = 15.0
@@ -265,7 +263,7 @@ for f in range(1, 121, 2):
     t = (f - 1) / BEAT * 2 * math.pi
     env = min(1.0, (f - 1) / 14.0) * min(1.0, (121 - f) / 14.0)     # fade in/out
     pulse = max(0.0, math.sin(t)) ** 1.5                            # golpe hacia abajo
-    nod = -7 + env * (30 * pulse - 8)
+    nod = -8 + env * (30 * pulse - 8)                               # env=0 -> SIT (-8)
     key(HEAD, f, rot(HEAD, nod, side_deg=env * 5.0 * math.sin(t / 2)))
     key(NECK, f, neck(4 + env * 6.0 * pulse, env * 2.5 * math.sin(t / 2)))
     key('spine003', f, rot('spine003', 6 + env * 4.5 * math.sin(t)))

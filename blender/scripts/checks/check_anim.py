@@ -13,6 +13,11 @@ TYPING_OK = {'shoulderL', 'shoulderR', 'upper_armL', 'upper_armR',
              'forearmL', 'forearmR', 'handL', 'handR'}
 # Unicos clips que pueden mover la cabeza.
 HEAD_OK = {'vibe', 'lookAround'}
+# idle es la base continua: solo columna/cuello, para que typing se superponga sin
+# escribir sobre los mismos huesos.
+IDLE_OK = {'spine001', 'spine002', 'spine003', 'spine005'}
+# Clips en bucle: deben ser continuos (modificador CYCLES o primer valor == ultimo).
+LOOPS = {'typing', 'idle', 'Blink'}
 
 
 def fcurves_of(act):
@@ -32,9 +37,30 @@ def bones_in(act):
             if fc.data_path.startswith('pose.bones')}
 
 
-def first_frame(act):
-    fr = [kp.co[0] for fc in fcurves_of(act) for kp in fc.keyframe_points]
-    return min(fr) if fr else None
+def fc_label(fc):
+    return f'{fc.data_path}[{fc.array_index}]'
+
+
+def not_keyed_at_1(act):
+    """F-curves cuyo primer keyframe no esta en el frame 1."""
+    bad = []
+    for fc in fcurves_of(act):
+        kps = fc.keyframe_points
+        if not len(kps) or abs(kps[0].co[0] - 1) > 0.001:
+            bad.append(fc_label(fc))
+    return bad
+
+
+def not_seamless(act):
+    """F-curves de un bucle sin modificador CYCLES y con primer valor != ultimo."""
+    bad = []
+    for fc in fcurves_of(act):
+        if any(m.type == 'CYCLES' for m in fc.modifiers):
+            continue
+        kps = fc.keyframe_points
+        if not len(kps) or abs(kps[0].co[1] - kps[-1].co[1]) > 1e-4:
+            bad.append(fc_label(fc))
+    return bad
 
 
 if arm.animation_data is None:
@@ -59,14 +85,19 @@ for n, ln in NEED.items():
         common.fail(f'pista {n} apunta a {st.action.name}')
     if abs(st.frame_start - 1) > 0.001:
         common.fail(f'{n} empieza en {st.frame_start}, esperado 1')
-    if abs((st.frame_end - st.frame_start) - (ln - 1)) > 1:
+    if abs((st.frame_end - st.frame_start) - (ln - 1)) > 0.001:
         common.fail(f'{n} dura {st.frame_end - st.frame_start}, esperado {ln - 1}')
     act = bpy.data.actions[n]
     if not fcurves_of(act):
         common.fail(f'la accion {n} no tiene f-curves')
-    ff = first_frame(act)
-    if ff is None or abs(ff - 1) > 0.001:
-        common.fail(f'{n} no keyframea en el frame 1 (primer key {ff})')
+    bad = not_keyed_at_1(act)
+    if bad:
+        common.fail(f'{n}: f-curves sin key en el frame 1: {bad}')
+    if n in LOOPS:
+        bad = not_seamless(act)
+        if bad:
+            common.fail(f'{n} es un bucle pero no es continuo (sin CYCLES y extremos '
+                        f'distintos): {bad}')
     print(f'CLIP {n:15s} frames {int(st.frame_start)}..{int(st.frame_end)} '
           f'({ln})  huesos {sorted(bones_in(act))}')
 
@@ -83,6 +114,9 @@ if extra:
     common.fail(f'typing toca huesos que no son de brazo/mano: {sorted(extra)}')
 if not {'handL', 'handR'} <= bones_in(bpy.data.actions['typing']):
     common.fail('typing no mueve las manos')
+extra = bones_in(bpy.data.actions['idle']) - IDLE_OK
+if extra:
+    common.fail(f'idle toca huesos fuera de columna/cuello: {sorted(extra)}')
 if not {'eyelidL', 'eyelidR'} <= bones_in(bpy.data.actions['Blink']):
     common.fail('Blink sin parpados')
 if not {'eyelidL', 'eyelidR'} <= bones_in(bpy.data.actions['vibe']):
