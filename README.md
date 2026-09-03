@@ -1,10 +1,10 @@
 # Me on 3D — avatar 3D de Sebastián
 
-Avatar cartoon de Sebastián sentado tecleando en su escritorio (Mac + tres monitores, barras RGB, mini Suzuki DR150 en la repisa y Medellín de noche por la ventana), listo para usar en una web con three.js. Estilo de referencia: [moncy.dev](https://www.moncy.dev/).
+Avatar cartoon de Sebastián sentado tecleando en su escritorio, dentro de una habitación cerrada (paredes, techo y piso) con Mac + tres monitores, barras RGB, repisa con soportes y mini Suzuki DR150, y Medellín de noche por la ventana. Listo para usar en una web con three.js. Estilo de referencia: [moncy.dev](https://www.moncy.dev/).
 
 Entregables:
 
-- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, ~48k triángulos, < 2 MB.
+- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 49 390 triángulos, ~9.8 MB (tope del check: 10 MB; la textura del personaje va a 2048 px y la de la ventana a 1504 px sin reescalar).
 - `export/avatar_uncompressed.glb` — la misma escena sin Draco (depuración).
 - `export/night.hdr` — entorno nocturno 1024×512 para la iluminación.
 - `export/preview.html` + `tools/serve_preview.sh` — visor local de referencia (three.js).
@@ -15,11 +15,11 @@ Entregables:
 | Carpeta | Contenido |
 |---|---|
 | `blender/scripts/` | Pipeline completo por script para Blender headless (ver "Regenerar"). `checks/` contiene las verificaciones automáticas. |
-| `blender/` | `scene.blend` (escritorio), `character.blend` (personaje rigueado + logo + partes faciales), `character_anim.blend` (+ animaciones), `avatar.blend` (todo ensamblado). |
+| `blender/` | `scene.blend` (habitación + escritorio), `character.blend` (personaje rigueado + logo + material limpio + partes faciales + audífonos), `character_anim.blend` (+ animaciones), `avatar.blend` (todo ensamblado). También `landmarks.json` y `headphones.json`, versionados. |
 | `refs/` | Referencias: frames de la cara (`face/`), foto de la moto y estilo (`style/`), logo de la empresa (`logo.png`). |
 | `generated/` | Salidas intermedias (ignorado por git): láminas de Higgsfield, malla Meshy, texturas, renders de aprobación, `credits.log`. |
 | `export/` | Entregables. Los `.glb` están ignorados por git; se regeneran con `export_glb.py`. |
-| `tools/` | `run_blender.sh` (lanzador headless), `glb_inspect.py` (inspección de GLB), `screens/` (texturas de pantalla con Chrome headless), `serve_preview.sh`. |
+| `tools/` | `run_blender.sh` (lanzador headless), `glb_inspect.py` (inspección de GLB), `screens/` (texturas de pantalla con Chrome headless), `serve_preview.sh`, `preview_probe.mjs` (sonda headless del visor con CDP). |
 | `docs/` | Spec, plan y `HANDOFF.md` (estado del proyecto y decisiones). |
 
 ## Regenerar todo
@@ -29,24 +29,30 @@ Requisitos: Blender 4.x/5.x en `/Applications/Blender.app`, Google Chrome, Pytho
 ```bash
 B=tools/run_blender.sh
 tools/screens/make_screens.sh                                   # texturas de las pantallas (usa refs/logo.png)
-$B - blender/scripts/build_scene.py                              # blender/scene.blend
-$B - blender/scripts/import_character.py                         # blender/character.blend desde generated/meshy/character_rigged.glb
-$B blender/character.blend blender/scripts/apply_chest_logo.py   # logo en el pecho (textura)
-$B blender/character.blend blender/scripts/render_face_grid.py   # rejilla de verificación; blender/landmarks.json ya está calibrado
-$B blender/character.blend blender/scripts/add_face_parts.py     # párpados, cejas y candongas con huesos (lee blender/landmarks.json)
+$B - blender/scripts/build_scene.py                               # blender/scene.blend (habitación + escritorio + repisa)
+$B blender/scene.blend blender/scripts/checks/check_scene.py
+$B - blender/scripts/import_character.py                          # blender/character.blend desde generated/meshy/character_rigged.glb
+$B blender/character.blend blender/scripts/apply_chest_logo.py    # logo en el pecho (textura)
+$B blender/character.blend blender/scripts/fix_character_material.py            # material y textura limpios (SIEMPRE después del logo)
+$B blender/character.blend blender/scripts/checks/check_character_material.py
+$B blender/character.blend blender/scripts/render_face_grid.py    # rejilla de verificación; blender/landmarks.json ya está calibrado
+$B blender/character.blend blender/scripts/add_face_parts.py      # párpados, cejas y candongas con huesos (lee blender/landmarks.json)
 $B blender/character.blend blender/scripts/hide_neck_headphones.py  # esconde los audífonos fundidos en el cuello (--probe para calibrar)
-$B blender/character.blend blender/scripts/add_headphones.py     # audífonos como pieza aparte + hueso 'headphones' (escribe blender/headphones.json)
-$B blender/character.blend blender/scripts/checks/check_rig.py   # después de add_face_parts y add_headphones: exige sus huesos y objetos
+$B blender/character.blend blender/scripts/add_headphones.py      # audífonos como pieza aparte + hueso 'headphones' (escribe blender/headphones.json)
+$B blender/character.blend blender/scripts/checks/check_rig.py    # después de add_face_parts y add_headphones: exige sus huesos y objetos
 $B blender/character.blend blender/scripts/checks/check_face_export.py
-$B blender/character.blend blender/scripts/animate.py            # blender/character_anim.blend (7 clips)
+$B blender/character.blend blender/scripts/animate.py             # blender/character_anim.blend (7 clips)
 $B blender/character_anim.blend blender/scripts/checks/check_anim.py
-$B - blender/scripts/render_hdr.py                               # export/night.hdr
-$B - blender/scripts/assemble.py                                 # blender/avatar.blend (+ generated/renders/assembled_v1.png)
-$B blender/avatar.blend blender/scripts/export_glb.py            # export/avatar.glb y avatar_uncompressed.glb
+$B - blender/scripts/render_hdr.py                                # export/night.hdr
+$B - blender/scripts/assemble.py                                  # blender/avatar.blend (+ generated/renders/assembled_v1.png)
+$B blender/avatar.blend blender/scripts/export_glb.py             # export/avatar.glb y avatar_uncompressed.glb
 python3 tools/glb_inspect.py export/avatar.glb
+node tools/preview_probe.mjs                                      # sonda del visor: PROBE errors [] + capturas preview_shot*.png
 ```
 
-Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py`, `add_face_parts.py`, `hide_neck_headphones.py` y `add_headphones.py`. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`). `add_face_parts.py` y `add_headphones.py` también (borran lo que crearon antes); `hide_neck_headphones.py` se marca con la propiedad `Body['neck_headphones_hidden']` y no se aplica dos veces. `check_rig.py` y `check_face_export.py` van después porque exigen los huesos y objetos faciales y los de los audífonos.
+Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py`, `fix_character_material.py`, `add_face_parts.py`, `hide_neck_headphones.py` y `add_headphones.py`, en ese orden. `apply_chest_logo.py` va SIEMPRE antes que `fix_character_material.py` (el primero escribe `generated/character_texture_logo.png` y el segundo parte de ese archivo para producir `generated/character_texture_clean.png`; al revés, el logo repuntaría el material a la textura sucia). `add_face_parts.py` va antes que `hide_neck_headphones.py` porque los párpados se apoyan por raycast sobre la cara y el encogido del cuello no la toca. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`) y `fix_character_material.py` también (parte siempre de `character_texture_logo.png`). `add_face_parts.py` y `add_headphones.py` borran lo que crearon antes; `hide_neck_headphones.py` se marca con la propiedad `Body['neck_headphones_hidden']` y no se aplica dos veces. `check_rig.py` y `check_face_export.py` van después porque exigen los huesos y objetos faciales y los de los audífonos.
+
+Material del personaje: Meshy exporta `Character` como metal rugoso autoiluminado (Metallic 1, Roughness 1, Emission con la textura base, Specular Tint x2) y con relleno color piel entre las islas UV, que sangra en los bordes y se ve como motas claras sobre el hoodie negro. `fix_character_material.py` deja Metallic 0 / Roughness 0.85 / sin emisión / Specular Tint blanco (si no, el GLB sale con `KHR_materials_specular` y el hoodie brilla como plástico) y limpia la textura: dilata el color de cada isla 16 px sobre los canales y aplica una mediana 3×3 solo en los píxeles oscuros. `checks/check_character_material.py` mide la fracción de color piel MÁS ALLÁ del halo de 16 px (`skin_frac_far`, objetivo < 0.01) usando la máscara UV `generated/character_uv_mask.png`.
 
 Audífonos: los que trae la malla de Meshy están fundidos alrededor del cuello, así que `hide_neck_headphones.py` los encoge hacia el eje del cuello (quedan escondidos dentro de la piel) y `add_headphones.py` modela una pieza aparte (`headphones_band`, `headphones_cup_L/R`) movida por el hueso `headphones`, hijo de `spine006`. Reposo = colgando del cuello; "puestos" = la rotación y la traslación que `add_headphones.py` escribe en `blender/headphones.json` (versionado) y que `poses.headphones_on()` lee. La región que se encoge se calibra con `hide_neck_headphones.py -- --probe`, que pinta la selección y renderiza `generated/renders/headphones_probe_*.png` sin guardar.
 
@@ -76,7 +82,7 @@ La pose sentada se calibra con `pose_probe.py` (12 renders de sonda) y vive en `
 
 Huesos de deformación (convención tipo Rigify sin puntos):
 
-`spine`, `spine001`, `spine002`, `spine003`, `spine005`, `spine006` (cabeza), `shoulderL/R`, `upper_armL/R`, `forearmL/R`, `handL/R`, `thighL/R`, `shinL/R`, `footL/R`, `toeL/R`, `eyelidL/R`, `eyebrow_L/R`. No hay dedos (el rig de Meshy no los trae). El skin del GLB incluye además dos articulaciones de deformación heredadas de Meshy, `headfront` y `head_end`, hijas de `spine006`: no las anima ningún clip, pero siguen a la cabeza y hay que dejarlas (tienen pesos).
+`spine`, `spine001`, `spine002`, `spine003`, `spine005`, `spine006` (cabeza), `shoulderL/R`, `upper_armL/R`, `forearmL/R`, `handL/R`, `thighL/R`, `shinL/R`, `footL/R`, `toeL/R`, `eyelidL/R`, `eyebrow_L/R`, `headphones`. No hay dedos (el rig de Meshy no los trae). `headphones` es hijo de `spine006` con la misma cabeza, apunta a +Z y roll 0: en reposo los audífonos cuelgan del cuello y el estado "puestos" es la rotación/traslación local guardada en `blender/headphones.json` (`on_head.rotation_deg` ≈ (−70°, 0, 0), `on_head.location`). El skin del GLB incluye además dos articulaciones de deformación heredadas de Meshy, `headfront` y `head_end`, hijas de `spine006`: no las anima ningún clip, pero siguen a la cabeza y hay que dejarlas (tienen pesos).
 
 Convenciones faciales: `eyelidL/R` girado +70° en X local = ojo cerrado; `eyebrow_L/R` desplazado +0.012 en Z local = ceja levantada.
 
@@ -89,16 +95,23 @@ Clips (24 fps), todos empiezan en el frame 1:
 | `idle` | 96 | loop; respiración (solo columna) |
 | `Blink` | 240 | loop; dos parpadeos |
 | `browup` | 18 | una vez; cejas arriba y vuelta |
-| `vibe` | 120 | una vez; cabeceo rap con ojos cerrados |
+| `vibe` | 216 | una vez; se pone los audífonos con las manos, cabecea con los ojos cerrados y se los quita |
 | `lookAround` | 96 | una vez; mira a los lados y arriba |
 
-Regla de mezcla: `idle` es la base continua; `typing` y `Blink` se superponen (huesos disjuntos); `vibe` y `lookAround` se reproducen en exclusiva (fundir `idle`/`typing` a 0 y volver); `browup` se superpone a todo. Solo `vibe` y `lookAround` mueven `spine006`.
+Regla de mezcla: `idle` es la base continua; `typing` y `Blink` se superponen (huesos disjuntos); `vibe` y `lookAround` se reproducen en exclusiva (fundir `idle`/`typing` a 0 y volver); `browup` se superpone a todo. Solo `vibe` y `lookAround` mueven `spine006`, y solo `vibe` mueve `headphones` (lo verifica `export_glb.py`).
 
-Nodos útiles en el GLB: `spine006` (cabeza, para el seguimiento del cursor), `screen_left`, `screen_center`, `screen_right`, `screen_laptop` (pantallas: materiales con `emissiveTexture`, encenderlas subiendo `emissiveIntensity`), `rgb_bar_L`, `rgb_bar_R` (barras de luz, cambiar `emissive`), `moto_mini`, `seat_anchor`, `moto_anchor`. Los materiales `Character` y `Window_Far` también traen `emissiveTexture` (piel/ropa y ciudad de noche): no tratarlos como pantallas.
+Nodos útiles en el GLB: `spine006` (cabeza, para el seguimiento del cursor), `spine003` (pecho, para acompañar el giro), `headphones` (hueso de los audífonos; si se gira la cabeza a mano hay que cancelar el giro aquí para que no se despeguen), `screen_left`, `screen_center`, `screen_right`, `screen_laptop` (pantallas: materiales con `emissiveTexture`, encenderlas subiendo `emissiveIntensity`), `rgb_bar_L`, `rgb_bar_R` (barras de luz, cambiar `emissive`), `moto_mini`, `seat_anchor`, `moto_anchor`, la habitación (`wall_back_L`, `wall_back_R`, `wall_back_top`, `wall_back_bottom`, `wall_left`, `wall_right`, `ceiling`, `floor`) y la ventana (`window_far`, `window_near`, `window_head`, `window_post_L/R`). El material `Window_Far` trae `emissiveTexture` (la ciudad de noche): no tratarlo como pantalla. El material `Character` YA NO trae emisión (`fix_character_material.py` la apaga), así que la piel y la ropa dependen solo de las luces de la escena.
 
 ## Usar el GLB en three.js
 
-El personaje mira hacia −Z (Y arriba). Una cámara equivalente a la de los renders de aprobación es `(-1.3, 1.95, -3.7)` mirando a `(0, 1.0, -0.6)`.
+El personaje mira hacia −Z (Y arriba). Una cámara equivalente a la de los renders de aprobación es `(-1.3, 1.95, -3.7)` mirando a `(0, 1.0, -0.6)` con 38° de FOV vertical.
+
+Tres cosas que cambian respecto a versiones anteriores del GLB:
+
+- El material `Character` **ya no trae emisión** (`fix_character_material.py` la apaga y deja Metallic 0 / Roughness 0.85 / Specular Tint blanco): el personaje se ve solo con las luces de la escena, así que hace falta iluminarlo (el visor de referencia usa un spot azulado, un point cálido de techo, un `RectAreaLight` en la ventana, una hemisférica y luces puntuales por pantalla y por barra RGB).
+- La textura de la ventana (`medellin`) se exporta a **1504 px de ancho sin reescalar** (ocupa media pantalla; el resto de texturas van a 1024 y la del personaje a 2048).
+- El visor de referencia **enciende sombras** (`renderer.shadowMap.enabled = true`, `PCFSoftShadowMap`) y excluye de `castShadow` a las pantallas, la ventana, el piso, el techo y las paredes; si no se encienden, la habitación se ve plana.
+
 
 ```js
 import * as THREE from 'three';
@@ -123,6 +136,14 @@ loader.load('avatar.glb', (gltf) => {
   screens.forEach((s) => { s.material = s.material.clone(); s.material.emissiveIntensity = 0; }); // luego fundir a 2.5
   const bars = ['rgb_bar_L', 'rgb_bar_R'].map((n) => gltf.scene.getObjectByName(n));            // ciclar bar.material.emissive
 
+  renderer.shadowMap.enabled = true;           // sin sombras la habitación se ve plana
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = !/^(screen_|window_far|floor|ceiling|wall_)/.test(o.name);
+    o.receiveShadow = !/^(screen_|window_far)/.test(o.name);
+  });
+
   const mixer = new THREE.AnimationMixer(gltf.scene);
   const act = Object.fromEntries(gltf.animations.map((c) => [c.name, mixer.clipAction(c)]));
   act.introAnimation.setLoop(THREE.LoopOnce).clampWhenFinished = true;
@@ -130,11 +151,15 @@ loader.load('avatar.glb', (gltf) => {
   mixer.addEventListener('finished', (e) => {
     if (e.action === act.introAnimation) ['idle', 'typing', 'Blink'].forEach((n) => act[n].reset().fadeIn(0.5).play());
   });
-  // en el bucle de render: mixer.update(dt); después, girar `head` hacia el cursor (±30°, lerp 0.08)
+  // en el bucle de render: mixer.update(dt); después, girar `head` (y `spine003` un 30%) hacia el cursor (±30°, lerp 0.08).
+  // Los audífonos cuelgan del hueso 'headphones', hijo de la cabeza: tras girarla hay que premultiplicar
+  // hp.quaternion por (head_nuevo^-1 · head_viejo) para que no se despeguen del cuello.
 });
 ```
 
-`export/preview.html` contiene la versión completa (fundido de pantallas, ciclo de color de las barras, botones `vibe`/`browup`/`lookAround`, `vibe` automático y seguimiento del cursor). Para verlo: `tools/serve_preview.sh` y abrir <http://localhost:8765/preview.html>.
+`export/preview.html` contiene la versión completa (luces y sombras de la habitación, fundido de pantallas, ciclo de color de las barras, botones `vibe`/`browup`/`lookAround`, `vibe` automático, clic sobre el personaje = `vibe` y seguimiento del cursor con cabeza + pecho). Para verlo: `tools/serve_preview.sh` y abrir <http://localhost:8765/preview.html>.
+
+`node tools/preview_probe.mjs` lo abre en Chrome headless (CDP), comprueba que no haya errores de página (`PROBE errors []`) y guarda `generated/renders/preview_shot.png`, `preview_shot_look.png` (cabeza girada hacia el cursor) y `preview_shot_vibe.png` (audífonos subiendo). La sonda desactiva el caché HTTP: el perfil de Chrome sobrevive entre corridas y, sin eso, mide un `avatar.glb` viejo.
 
 ## Créditos Higgsfield
 
