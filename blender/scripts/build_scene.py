@@ -40,8 +40,10 @@ bpy.ops.object.empty_add(location=(0, 0.55, 0.47)); bpy.context.active_object.na
 box('laptop_base', (0.32, 0.22, 0.012), (0, 0.98, DESK_Z + 0.024), m_alu, col)
 lap_screen = box('laptop_lid', (0.32, 0.008, 0.21), (0, 1.09, DESK_Z + 0.135), m_alu, col)
 lap_screen.rotation_euler = (math.radians(-12), 0, 0)
+m_screen_laptop = screen_mat('Screen_Laptop', 'code.png')
+m_screen_laptop.use_backface_culling = True
 plane('screen_laptop', (0.29, 0.18), (0, 1.085, DESK_Z + 0.135), rotation=(math.radians(90 - 12), 0, 0),
-      material=screen_mat('Screen_Laptop', 'code.png'), collection=col)
+      material=m_screen_laptop, collection=col)
 
 # --- 3 monitores (bajos, en arco, para dejar la cara del personaje visible por encima)
 # Nota de controlador: la camara de aprobacion queda AL OTRO LADO del escritorio
@@ -54,10 +56,15 @@ MON = [('L', -0.62, 0.52, 0.28, 'screen_left', 'Screen_Left', 'code.png', 32),
 for tag, x, w, h, sname, mname, png, yaw in MON:
     zc = DESK_Z + 0.06 + h / 2
     y = 1.45
+    yaw_rad = math.radians(yaw)
     body = box(f'monitor_{tag}', (w, 0.03, h), (x, y, zc), m_black, col)
-    body.rotation_euler = (0, 0, math.radians(yaw))
-    scr = plane(sname, (w - 0.02, h - 0.02), (x, y - 0.016, zc), rotation=(math.radians(90), 0, math.radians(yaw)),
-                material=screen_mat(mname, png), collection=col)
+    body.rotation_euler = (0, 0, yaw_rad)
+    scr_mat = screen_mat(mname, png)
+    scr_mat.use_backface_culling = True
+    scr_x = x + 0.016 * math.sin(yaw_rad)
+    scr_y = y - 0.016 * math.cos(yaw_rad)
+    scr = plane(sname, (w - 0.02, h - 0.02), (scr_x, scr_y, zc), rotation=(math.radians(90), 0, yaw_rad),
+                material=scr_mat, collection=col)
     scr.parent = body; scr.matrix_parent_inverse = body.matrix_world.inverted()
     cylinder(f'monitor_stand_{tag}', 0.02, 0.12, (x, y, DESK_Z + 0.06), material=m_alu, collection=col)
     base = box(f'monitor_base_{tag}', (0.22, 0.16, 0.012), (x, y, DESK_Z + 0.02), m_alu, col)
@@ -80,8 +87,13 @@ bev = ctrl.modifiers.new('bevel', 'BEVEL'); bev.width = 0.015; bev.segments = 3
 # La normal se orienta hacia +Y (hacia la sala/camara) en vez de -Y como en el
 # brief original, porque la ventana se movio al lado opuesto del cuarto.
 WIN = os.path.join(common.GEN, 'window', 'medellin.png')
-m_far = mat('Window_Far', (0, 0, 0, 1), roughness=1.0, image_path=WIN if os.path.exists(WIN) else None,
-            emission=(1, 1, 1, 1), emission_strength=1.2)
+if os.path.exists(WIN):
+    m_far = mat('Window_Far', (0, 0, 0, 1), roughness=1.0, image_path=WIN,
+                emission=(1, 1, 1, 1), emission_strength=1.2)
+else:
+    # sin imagen todavia: fondo nocturno azulado en vez de blanco quemado
+    m_far = mat('Window_Far', (0, 0, 0, 1), roughness=1.0,
+                emission=(0.02, 0.05, 0.12, 1), emission_strength=0.4)
 plane('window_far', (4.0, 2.25), (0, -1.6, 1.55), rotation=(math.radians(-90), 0, 0), material=m_far, collection=col)
 m_frame = mat('Window_Frame', (0.03, 0.03, 0.035, 1), roughness=0.6)
 box('window_near', (4.2, 0.06, 0.25), (0, -1.4, 0.42), m_frame, col)          # antepecho
@@ -91,12 +103,27 @@ for x in (-2.1, 2.1):
 # --- camara y luces para renders de aprobacion
 # Ruling del controlador: la camara debe quedar ENFRENTE del personaje, cruzando
 # el escritorio, para que se vea su cara (el personaje mira hacia +Y).
-common.add_camera((-1.3, 3.7, 1.95), (0, 0.5, 1.05), lens=35)
+cam = common.add_camera((-1.3, 3.7, 1.95), (0, 0.5, 1.05), lens=35)
 common.add_light('key', 'AREA', (-1.2, 2.4, 2.2), 80, (0.75, 0.85, 1.0), size=1.2)
 common.add_light('screen_glow', 'AREA', (0, 1.3, 1.1), 25, (0.6, 0.75, 1.0), size=1.5)
 sc.world = bpy.data.worlds.new('World'); sc.world.use_nodes = True
 sc.world.node_tree.nodes['Background'].inputs['Color'].default_value = (0.002, 0.003, 0.006, 1)
 
 common.render(os.path.join(common.RENDERS, 'scene_v1.png'))
+
+# --- segundo render de aprobacion: punto de vista del personaje, para
+# verificar que las 3 pantallas de los monitores y el laptop se lean bien
+# y sin espejado (backface culling ya activo en sus materiales).
+SCREEN_MAT_NAMES = ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop')
+cam.location = (0, 0.55, 1.25)
+common.look_at(cam, (0, 1.45, 1.0))
+cam.data.lens = 24
+screen_mats = [bpy.data.materials[n] for n in SCREEN_MAT_NAMES]
+for sm in screen_mats:
+    sm.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 2.0
+common.render(os.path.join(common.RENDERS, 'scene_v1_screens.png'))
+for sm in screen_mats:
+    sm.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
+
 print('SCENE_TRIS', common.scene_tri_count())
 common.save(os.path.join(common.BLEND_DIR, 'scene.blend'))
