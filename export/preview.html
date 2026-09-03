@@ -82,7 +82,7 @@ const barLights = [];
 for (const x of [-1.05, 1.05]) { const l = new THREE.PointLight(0x4090ff, 3, 4, 2); l.position.set(x, 1.3, 1.2); scene.add(l); barLights.push(l); lights.push(l); }
 status.lights = lights.length; status.shadows = true;
 
-new RGBELoader().load('night.hdr', (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
+new RGBELoader().load('night.hdr?v=' + Date.now(), (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
   undefined, (e) => console.error('night.hdr: ' + (e.message || e)));
 
 const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
@@ -125,7 +125,9 @@ const vibe = () => playExclusive('vibe');
 window.__vibe = vibe;   // para la sonda headless
 const browup = () => { const a = actions.browup; if (!a || a.isRunning()) return; playOnce('browup', 0.1, () => a.fadeOut(0.15)); };
 
-loader.load('avatar.glb', (gltf) => {
+// ?v= evita el cache HTTP de Chrome: python http.server no manda Cache-Control y tras regenerar el GLB
+// un reload normal seguia mostrando el modelo viejo (pesos viejos + seguimiento nuevo = cara deforme).
+loader.load('avatar.glb?v=' + Date.now(), (gltf) => {
   scene.add(gltf.scene);
   gltf.scene.traverse(o => {
     if (o.isMesh) { o.frustumCulled = false; o.castShadow = !/^(screen_|window_far|floor|ceiling|wall_)/.test(o.name); o.receiveShadow = !/^(screen_|window_far)/.test(o.name); }
@@ -167,7 +169,9 @@ loader.load('avatar.glb', (gltf) => {
 // audifonos colgando del cuello) cancela el giro para no columpiarse. Se aplica DESPUES del mixer y
 // se deshace antes del siguiente update (los clips base no escriben estos huesos cada frame).
 const YAW_MAX = Math.PI / 4, PITCH_UP = Math.PI / 7.2, PITCH_DOWN = Math.PI / 9;   // 45 / 25 / 20 grados
-const SHARE = { chest: { yaw: 0.3, pitch: 0 }, neck: { yaw: 0.25, pitch: 0.3 } };   // la cabeza pone lo que falta hasta 1
+// El cuello NO recibe pitch: el collar y la capucha del hoodie llevan ~30 % de peso de spine005 y al
+// cabecear con el cuello la cabeza se hunde en el collar (se vio en preview_shot.png con el cursor abajo).
+const SHARE = { chest: { yaw: 0.3, pitch: 0 }, neck: { yaw: 0.2, pitch: 0 } };   // la cabeza pone lo que falta hasta 1
 const follow = { head: null, neck: null, chest: null, hp: null };   // Object3D
 const saved = { head: null, neck: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
 const look = { yaw: 0, pitch: 0 };
