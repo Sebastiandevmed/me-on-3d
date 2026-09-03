@@ -36,7 +36,7 @@
 #    -> personaje a 1536. Ninguna textura depende de alfa (se verifica), asi que JPEG global
 #    es seguro.
 #
-# Uso: tools/run_blender.sh blender/avatar.blend blender/scripts/export_glb.py 2>&1 | grep -E 'EXPORT|Error|Traceback'
+# Uso: tools/run_blender.sh blender/avatar.blend blender/scripts/export_glb.py 2>&1 | grep -E 'EXPORT|GLB|CHECK|Error|Traceback'
 import sys, os, json, struct
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

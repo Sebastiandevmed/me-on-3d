@@ -13,7 +13,8 @@
 #      verificar a ojo las coordenadas y leer la profundidad y de los ojos.
 #
 # El personaje mira a +Y; su lado izquierdo está en -X.
-# Escribe generated/landmarks.json (que add_face_parts.py consume).
+# Escribe blender/landmarks.json (que add_face_parts.py consume) SOLO si no existe: el
+# archivo versionado esta calibrado a mano (lobulos, radios) y no se sobrescribe.
 #
 # Uso: tools/run_blender.sh blender/character.blend blender/scripts/render_face_grid.py
 import sys, os, math, json
@@ -236,7 +237,7 @@ def main():
                 'skin_srgb': [round(c, 4) for c in skin],
                 'brow_srgb': [round(c, 4) for c in brow],
             }
-            path = os.path.join(common.GEN, 'landmarks.json')
+            path = common.LANDMARKS
             if not os.path.exists(path):
                 json.dump(lm, open(path, 'w'), indent=2)
                 print('LM_WRITTEN', path)

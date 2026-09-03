@@ -64,54 +64,53 @@ character_checks('SIT')
 
 # ------------------------------------------------------------------ moto mini
 moto_path = os.path.join(common.GEN, 'moto', 'dr150.glb')
-if os.path.exists(moto_path):
-    before = set(bpy.data.objects); before_img = set(bpy.data.images)
-    bpy.ops.import_scene.gltf(filepath=moto_path)
-    new = [o for o in bpy.data.objects if o not in before]
-    moto_col = bpy.data.collections.new('Moto'); sc.collection.children.link(moto_col)
-    root = bpy.data.objects.new('moto_mini', None); moto_col.objects.link(root)
-    for o in new:
-        for c in list(o.users_collection): c.objects.unlink(o)
-        moto_col.objects.link(o)
-        if o.parent is None: o.parent = root
-    bpy.context.view_layer.update()
-    meshes = [o for o in new if o.type == 'MESH']
-    pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
-    dims = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
-    axis = max(range(3), key=lambda i: dims[i])
-    print('MOTO import objetos', [o.name for o in new], 'tris', sum(common.tri_count(o) for o in meshes),
-          'bbox_xyz', [round(d, 3) for d in dims], 'eje_largo', 'XYZ'[axis])
-    s = MOTO_LENGTH / dims[axis]
-    root.scale = (s, s, s)
-    bpy.context.view_layer.update()
-    pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
-    anchor = bpy.data.objects['moto_anchor'].location
-    # centrar la huella XY de la moto sobre el anchor y apoyar la base en el tope de la repisa
-    cx = (max(p.x for p in pts) + min(p.x for p in pts)) / 2
-    cy = (max(p.y for p in pts) + min(p.y for p in pts)) / 2
-    minz = min(p.z for p in pts)
-    root.rotation_euler = (0, 0, math.radians(MOTO_YAW_DEG))
-    # el giro es alrededor del origen del root, asi que se rota el offset XY tambien
-    off = Vector((-cx, -cy, 0)); off.rotate(root.rotation_euler)
-    root.location = (anchor.x + off.x, anchor.y + off.y, anchor.z - minz)
-    bpy.context.view_layer.update()
-    pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
-    print('MOTO escala', round(s, 5), 'yaw', MOTO_YAW_DEG, 'root.location', [round(v, 4) for v in root.location],
-          'bbox_final x', round(min(p.x for p in pts), 3), round(max(p.x for p in pts), 3),
-          'y', round(min(p.y for p in pts), 3), round(max(p.y for p in pts), 3),
-          'z', round(min(p.z for p in pts), 4), round(max(p.z for p in pts), 4),
-          'repisa_top', round(anchor.z, 4))
-    # texturas de la moto a 1k (regla global: 1k para todo menos el personaje)
-    for img in bpy.data.images:
-        if img in before_img: continue
-        w, h = img.size
-        if max(w, h) > MOTO_TEX:
-            img.scale(MOTO_TEX, MOTO_TEX)
-            img.pack()
-        print('MOTO textura', img.name, 'de', (w, h), 'a', tuple(img.size),
-              'packed', img.packed_file.size if img.packed_file else None)
-else:
-    print('MOTO no encontrada:', moto_path)
+if not os.path.exists(moto_path):
+    common.fail(f'falta la malla de la moto {moto_path} (insumo de Higgsfield/Meshy, no regenerable sin creditos)')
+before = set(bpy.data.objects); before_img = set(bpy.data.images)
+bpy.ops.import_scene.gltf(filepath=moto_path)
+new = [o for o in bpy.data.objects if o not in before]
+moto_col = bpy.data.collections.new('Moto'); sc.collection.children.link(moto_col)
+root = bpy.data.objects.new('moto_mini', None); moto_col.objects.link(root)
+for o in new:
+    for c in list(o.users_collection): c.objects.unlink(o)
+    moto_col.objects.link(o)
+    if o.parent is None: o.parent = root
+bpy.context.view_layer.update()
+meshes = [o for o in new if o.type == 'MESH']
+pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
+dims = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
+axis = max(range(3), key=lambda i: dims[i])
+print('MOTO import objetos', [o.name for o in new], 'tris', sum(common.tri_count(o) for o in meshes),
+      'bbox_xyz', [round(d, 3) for d in dims], 'eje_largo', 'XYZ'[axis])
+s = MOTO_LENGTH / dims[axis]
+root.scale = (s, s, s)
+bpy.context.view_layer.update()
+pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
+anchor = bpy.data.objects['moto_anchor'].location
+# centrar la huella XY de la moto sobre el anchor y apoyar la base en el tope de la repisa
+cx = (max(p.x for p in pts) + min(p.x for p in pts)) / 2
+cy = (max(p.y for p in pts) + min(p.y for p in pts)) / 2
+minz = min(p.z for p in pts)
+root.rotation_euler = (0, 0, math.radians(MOTO_YAW_DEG))
+# el giro es alrededor del origen del root, asi que se rota el offset XY tambien
+off = Vector((-cx, -cy, 0)); off.rotate(root.rotation_euler)
+root.location = (anchor.x + off.x, anchor.y + off.y, anchor.z - minz)
+bpy.context.view_layer.update()
+pts = [o.matrix_world @ v.co for o in meshes for v in o.data.vertices]
+print('MOTO escala', round(s, 5), 'yaw', MOTO_YAW_DEG, 'root.location', [round(v, 4) for v in root.location],
+      'bbox_final x', round(min(p.x for p in pts), 3), round(max(p.x for p in pts), 3),
+      'y', round(min(p.y for p in pts), 3), round(max(p.y for p in pts), 3),
+      'z', round(min(p.z for p in pts), 4), round(max(p.z for p in pts), 4),
+      'repisa_top', round(anchor.z, 4))
+# texturas de la moto a 1k (regla global: 1k para todo menos el personaje)
+for img in bpy.data.images:
+    if img in before_img: continue
+    w, h = img.size
+    if max(w, h) > MOTO_TEX:
+        img.scale(MOTO_TEX, MOTO_TEX)
+        img.pack()
+    print('MOTO textura', img.name, 'de', (w, h), 'a', tuple(img.size),
+          'packed', img.packed_file.size if img.packed_file else None)
 
 # ------------------------------------------------------------------ HDR como mundo
 hdr = os.path.join(common.EXPORT, 'night.hdr')

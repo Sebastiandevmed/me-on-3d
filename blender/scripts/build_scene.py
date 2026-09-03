@@ -21,6 +21,7 @@ def screen_mat(name, png):
     p = os.path.join(SCREENS, png)
     if os.path.exists(p):
         return mat(name, (0, 0, 0, 1), roughness=0.2, image_path=p, emission=(1, 1, 1, 1), emission_strength=0.0)
+    print(f'WARNING PLACEHOLDER pantalla {name} sin textura: falta {p} (ejecutar tools/screens/make_screens.sh)')
     return mat(name, (0.02, 0.02, 0.03, 1), roughness=0.2, emission=(0.2, 0.4, 1, 1), emission_strength=0.0)
 
 # --- piso y escritorio
@@ -92,6 +93,7 @@ if os.path.exists(WIN):
                 emission=(1, 1, 1, 1), emission_strength=1.2)
 else:
     # sin imagen todavia: fondo nocturno azulado en vez de blanco quemado
+    print(f'WARNING PLACEHOLDER ventana Window_Far sin imagen: falta {WIN} (imagen de Higgsfield, insumo irremplazable)')
     m_far = mat('Window_Far', (0, 0, 0, 1), roughness=1.0,
                 emission=(0.02, 0.05, 0.12, 1), emission_strength=0.4)
 # rotación (90°,0,180°): normal hacia +Y (la habitación) y el eje V de la textura hacia +Z.

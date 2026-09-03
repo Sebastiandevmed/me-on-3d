@@ -48,16 +48,7 @@ DIR_HAND_DOWN = lambda s: (-SX[s] * 0.04, 0.22, -0.97)
 
 # --------------------------------------------------------------------------- utilidades
 
-def fcurves_of(act):
-    """F-curves de una accion, con o sin 'slots' (Blender >= 4.4)."""
-    fcs = list(getattr(act, 'fcurves', []) or [])
-    if fcs:
-        return fcs
-    for layer in getattr(act, 'layers', []):
-        for strip in layer.strips:
-            for cb in getattr(strip, 'channelbags', []):
-                fcs += list(cb.fcurves)
-    return fcs
+fcurves_of = common.fcurves_of
 
 
 def key(bone, frame, euler=None, loc=None):
@@ -175,9 +166,28 @@ for a in list(bpy.data.actions):
     bpy.data.actions.remove(a)
 poses.apply(arm, SIT)
 
+# Guardia: la pose de brazos del frame 1 de typing/intro (solve_arms con las direcciones
+# base, up=0) tiene que reproducir los eulers de brazos horneados en poses.SIT. Si se
+# reimporta el rig (otros ejes locales de hueso) SIT queda invalidado y esto lo delata.
+def check_sit_arms(tol_deg=1.0):
+    from mathutils import Euler
+    solved = solve_arms(upper=DIR_UPPER, fore=DIR_FORE, hand=DIR_HAND)
+    worst = 0.0
+    for b, e in solved.items():
+        qa = Euler(e, 'XYZ').to_quaternion(); qb = Euler(SIT[b], 'XYZ').to_quaternion()
+        d = math.degrees(qa.rotation_difference(qb).angle)
+        worst = max(worst, d)
+        if d > tol_deg:
+            common.fail(f'solve_arms() no reproduce poses.SIT en {b}: {d:.2f} grados de diferencia '
+                        f'(tolerancia {tol_deg}); recalibrar TYPING_HOME en poses.py con poses.aim()')
+    print('SIT_ARMS_OK max_diff_deg', round(worst, 3))
+    poses.apply(arm, SIT)
+check_sit_arms()
+
 
 # --------------------------------------------------------------------------- 1) typing
-# 48 frames en bucle. Sin dedos: alterna el levante de muneca de cada mano (~8 grados) y
+# 48 frames en bucle. Sin dedos: alterna el levante de muneca de cada mano (~17 grados:
+# la direccion de la mano pasa de (.., 0.995, 0) a (.., 0.995, 0.30)) y
 # acompana con un levante minimo de antebrazo. Ni columna ni cabeza.
 # La oscilacion es ASIMETRICA: `up` va de 0 (pose SIT, palma sobre el laptop) a 1 (mano
 # arriba). Con +-amp simetrico la carrera hacia abajo metia las yemas ~3.4 cm en el

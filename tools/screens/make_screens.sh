@@ -2,7 +2,8 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/generated/screens"; mkdir -p "$OUT"
-CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Se puede apuntar a otro Chrome con la variable de entorno CHROME.
+CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 if [ ! -x "$CHROME" ]; then
   echo "Error: Google Chrome no encontrado en $CHROME" >&2
   exit 1

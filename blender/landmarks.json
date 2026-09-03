@@ -1,0 +1,47 @@
+{
+  "_note": "Coordenadas de mundo del personaje de pie (rest pose), leidas de generated/renders/face_grid_front.png y face_grid_side.png (rejilla de 1 cm, ortho 0.36 m sobre 1200 px => 0.3 mm/px) y confirmadas con el analisis de la textura de render_face_grid.py. Mira a +Y; su izquierda esta en -X.",
+  "eye_L": [
+    -0.044,
+    0.093,
+    1.5694
+  ],
+  "eye_R": [
+    0.0455,
+    0.093,
+    1.5694
+  ],
+  "eye_radius": 0.022,
+  "eye_half_h": 0.016,
+  "brow_L": [
+    -0.043,
+    0.1055,
+    1.603
+  ],
+  "brow_R": [
+    0.044,
+    0.1055,
+    1.603
+  ],
+  "brow_len": 0.066,
+  "brow_h": 0.021,
+  "ear_L": [
+    -0.104,
+    -0.03,
+    1.522
+  ],
+  "ear_R": [
+    0.104,
+    -0.03,
+    1.522
+  ],
+  "skin_srgb": [
+    0.94,
+    0.58,
+    0.475
+  ],
+  "brow_srgb": [
+    0.1137,
+    0.0667,
+    0.0824
+  ]
+}

@@ -16,7 +16,7 @@
   // Errores visibles en pantalla (también en la captura headless).
   window.__errors = [];
   const showErr = (m) => { window.__errors.push(m); const e = document.getElementById('err'); if (e) { e.style.display = 'block'; e.textContent = window.__errors.join('\n'); } };
-  window.addEventListener('error', (ev) => showErr('error: ' + (ev.message || ev.type) + (ev.filename ? ' @ ' + ev.filename.split('/').pop() + ':' + ev.lineno : '')), true);
+  window.addEventListener('error', (ev) => { const res = ev.target && (ev.target.src || ev.target.href); showErr('error: ' + (ev.message || ev.type) + (ev.filename ? ' @ ' + ev.filename.split('/').pop() + ':' + ev.lineno : '') + (res ? ' [' + res + ']' : '')); }, true);
   window.addEventListener('unhandledrejection', (ev) => showErr('unhandled: ' + (ev.reason && ev.reason.message || ev.reason)));
   const _ce = console.error.bind(console); console.error = (...a) => { showErr('console.error: ' + a.map(String).join(' ')); _ce(...a); };
   const _cw = console.warn.bind(console); console.warn = (...a) => { showErr('console.warn: ' + a.map(String).join(' ')); _cw(...a); };
@@ -84,6 +84,7 @@ const EXCLUSIVE = { vibe: { fade: 0.5, dropBlink: true }, lookAround: { fade: 0.
 let exclusive = null;            // nombre del clip exclusivo en curso
 let followWeight = 0;            // peso del seguimiento de cursor (baja a 0 durante vibe/lookAround)
 let headClipQ = null;            // cuaternión de spine006 tal como lo dejan los clips (sin el offset del cursor)
+let screensOnAt = Infinity;      // instante (performance.now) en que empieza el fundido de las pantallas
 // idle no anima spine006, así que nadie "reescribe" el hueso cada frame: hay que deshacer el offset antes del mixer
 // y antes de arrancar cualquier acción (si no, el mixer guardaría el offset como pose de reposo y se acumularía).
 const undoFollow = () => { if (head && headClipQ) head.quaternion.copy(headClipQ); };
@@ -97,7 +98,7 @@ const playOnce = (n, fade, cb) => {
   mixer.addEventListener('finished', onEnd);
 };
 const startBase = (fade, skipBlink = false) => { for (const n of BASE) { if (skipBlink && n === 'Blink') continue; if (actions[n] && !actions[n].isRunning()) playLoop(n, fade); } };
-const stopBase = (fade, dropBlink) => { for (const n of BASE) { if (n === 'Blink' && !dropBlink) continue; if (actions[n] && actions[n].isRunning()) actions[n].fadeOut(fade); } };
+const stopBase = (fade, dropBlink) => { for (const n of BASE) { if (n === 'Blink' && !dropBlink) continue; if (actions[n] && actions[n].isRunning()) { const a = actions[n]; const w = a.getEffectiveWeight(); a.setEffectiveWeight(w); a.fadeOut(fade); } } };  // fadeOut arranca desde 1: fijar el peso actual evita un salto si se pide en mitad de un fadeIn
 const playExclusive = (n) => {
   if (exclusive || !actions[n]) return false;
   const cfg = EXCLUSIVE[n]; exclusive = n;
@@ -151,10 +152,11 @@ function applyHeadFollow() {
   look.pitch += (mouse.y * LIM * 0.5 - look.pitch) * 0.08;
   if (!head || followWeight < 0.001) return;
   // Giro en espacio mundial: yaw alrededor de Y mundial, pitch alrededor del eje derecho de la cámara.
-  // El personaje mira a -Z; con r = derecha de la cámara, girar hacia la derecha de la pantalla es yaw*sign(-r.x)
-  // y mirar hacia arriba de la pantalla es pitch*sign(r.x)  (v' ≈ v + θ·(eje × v)).
+  // El personaje mira a -Z; con r = derecha de la cámara, girar hacia la derecha de la pantalla es yaw*(-r.x)
+  // y mirar hacia arriba de la pantalla es pitch*r.x  (v' ≈ v + θ·(eje × v)).
   camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-  const s = camRight.x >= 0 ? 1 : -1;
+  // Factor continuo (-1..1) en vez de sign(r.x): el seguimiento se desvanece suavemente en las vistas laterales.
+  const s = camRight.x;
   qWorld.setFromAxisAngle(axisY, -s * look.yaw * followWeight);
   qTmp.setFromAxisAngle(camRight, s * look.pitch * followWeight);
   qWorld.multiply(qTmp);
@@ -164,7 +166,7 @@ function applyHeadFollow() {
   head.quaternion.premultiply(qTmp);
 }
 
-let frames = 0, fpsT = performance.now(), screensOnAt = Infinity, watchdog = 0, rafId = 0;
+let frames = 0, fpsT = performance.now(), watchdog = 0, rafId = 0;
 // requestAnimationFrame con respaldo por temporizador: en Chrome headless (sin display link) rAF nunca dispara.
 function nextFrame() { rafId = requestAnimationFrame(animate); clearTimeout(watchdog); watchdog = setTimeout(() => { cancelAnimationFrame(rafId); animate(); }, 120); }
 function animate() {

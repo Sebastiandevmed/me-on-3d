@@ -5,6 +5,9 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 GEN = os.path.join(ROOT, 'generated')
 EXPORT = os.path.join(ROOT, 'export')
 BLEND_DIR = os.path.join(ROOT, 'blender')
+# Landmarks de la cara calibrados a mano (versionados; render_face_grid.py solo escribe
+# una version automatica si el archivo no existe).
+LANDMARKS = os.path.join(BLEND_DIR, 'landmarks.json')
 RENDERS = os.path.join(GEN, 'renders')
 FPS = 24
 
@@ -162,3 +165,15 @@ def save(path):
 def fail(msg):
     print('CHECK FAILED:', msg)
     sys.exit(1)
+
+def fcurves_of(act):
+    """F-curves de una accion, con o sin 'slots' (Blender >= 4.4)."""
+    fcs = list(getattr(act, 'fcurves', []) or [])
+    if fcs:
+        return fcs
+    for layer in getattr(act, 'layers', []):
+        for strip in layer.strips:
+            for cb in getattr(strip, 'channelbags', []):
+                fcs += list(cb.fcurves)
+    return fcs
+

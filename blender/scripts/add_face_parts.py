@@ -24,6 +24,9 @@
 # para calibrar sin volver a importar el personaje (import_character.py rehace el .blend y
 # se llevaría por delante el logo del pecho).
 #
+# Lee los landmarks calibrados a mano de blender/landmarks.json (versionado). Si falta una
+# clave o las orejas siguen en [0,0,0] (valor automatico de render_face_grid.py) falla.
+#
 # Uso: tools/run_blender.sh blender/character.blend blender/scripts/add_face_parts.py
 import sys, os, json, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -273,11 +276,33 @@ def make_hoop(name, centre, major, material):
     return ob
 
 
+# --------------------------------------------------------------------------- landmarks
+
+LM_KEYS = ('eye_L', 'eye_R', 'eye_radius', 'eye_half_h', 'brow_L', 'brow_R', 'brow_len',
+           'brow_h', 'ear_L', 'ear_R', 'skin_srgb', 'brow_srgb')
+
+def load_landmarks():
+    path = common.LANDMARKS
+    if not os.path.exists(path):
+        common.fail(f'falta {path}: es el archivo calibrado a mano (versionado); '
+                    'render_face_grid.py escribe una version automatica si no existe')
+    lm = json.load(open(path))
+    missing = [k for k in LM_KEYS if k not in lm]
+    if missing:
+        common.fail(f'{path} sin las claves {missing} (requeridas: {list(LM_KEYS)})')
+    for k in ('ear_L', 'ear_R'):
+        if list(lm[k]) == [0, 0, 0]:
+            common.fail(f'{path}: {k} = [0,0,0] (valor automatico de render_face_grid.py); '
+                        'hay que calibrar los lobulos a mano con los renders face_grid_*.png')
+    print('LANDMARKS', path)
+    return lm
+
+
 # --------------------------------------------------------------------------- main
 
 def main():
     common.ensure_dirs()
-    lm = json.load(open(os.path.join(common.GEN, 'landmarks.json')))
+    lm = load_landmarks()
     arm = bpy.data.objects['Armature']
     body = bpy.data.objects['Body']
     cleanup(arm)

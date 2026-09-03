@@ -11,4 +11,12 @@ t = common.scene_tri_count()
 if t > 15000: common.fail(f'escena demasiado pesada: {t} tris')
 for m in ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop', 'RGB_Bar'):
     if m not in bpy.data.materials: common.fail(f'falta material {m}')
+# Las pantallas y la ventana deben llevar textura real (build_scene.py pone un placeholder
+# y avisa con WARNING PLACEHOLDER si falta el PNG; aqui eso es un fallo).
+for m in ('Screen_Left', 'Screen_Center', 'Screen_Right', 'Screen_Laptop', 'Window_Far'):
+    mt = bpy.data.materials.get(m)
+    if not mt: common.fail(f'falta material {m}')
+    texs = [n for n in mt.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image is not None]
+    if not texs: common.fail(f'material {m} sin nodo TEX_IMAGE con imagen (placeholder de build_scene.py)')
+    print('TEX', m, texs[0].image.name, tuple(texs[0].image.size))
 print('CHECK_SCENE OK tris=', t)

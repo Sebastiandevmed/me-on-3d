@@ -20,16 +20,7 @@ IDLE_OK = {'spine001', 'spine002', 'spine003', 'spine005'}
 LOOPS = {'typing', 'idle', 'Blink'}
 
 
-def fcurves_of(act):
-    """F-curves con o sin 'slots' (Blender >= 4.4)."""
-    fcs = list(getattr(act, 'fcurves', []) or [])
-    if fcs:
-        return fcs
-    for layer in getattr(act, 'layers', []):
-        for strip in layer.strips:
-            for cb in getattr(strip, 'channelbags', []):
-                fcs += list(cb.fcurves)
-    return fcs
+fcurves_of = common.fcurves_of
 
 
 def bones_in(act):

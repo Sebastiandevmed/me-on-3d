@@ -3,3 +3,6 @@ export/*.glb
 *.blend1
 .DS_Store
 .superpowers/
+blender/*.blend
+__pycache__/
+tools/screens/logo.png

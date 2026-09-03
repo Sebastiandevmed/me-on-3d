@@ -32,9 +32,9 @@ tools/screens/make_screens.sh                                   # texturas de la
 $B - blender/scripts/build_scene.py                              # blender/scene.blend
 $B - blender/scripts/import_character.py                         # blender/character.blend desde generated/meshy/character_rigged.glb
 $B blender/character.blend blender/scripts/apply_chest_logo.py   # logo en el pecho (textura)
-$B blender/character.blend blender/scripts/checks/check_rig.py
-$B blender/character.blend blender/scripts/render_face_grid.py   # rejilla para generated/landmarks.json
-$B blender/character.blend blender/scripts/add_face_parts.py     # párpados, cejas y candongas con huesos
+$B blender/character.blend blender/scripts/render_face_grid.py   # rejilla de verificación; blender/landmarks.json ya está calibrado
+$B blender/character.blend blender/scripts/add_face_parts.py     # párpados, cejas y candongas con huesos (lee blender/landmarks.json)
+$B blender/character.blend blender/scripts/checks/check_rig.py   # después de add_face_parts: exige los huesos faciales
 $B blender/character.blend blender/scripts/checks/check_face_export.py
 $B blender/character.blend blender/scripts/animate.py            # blender/character_anim.blend (7 clips)
 $B blender/character_anim.blend blender/scripts/checks/check_anim.py
@@ -44,9 +44,27 @@ $B blender/avatar.blend blender/scripts/export_glb.py            # export/avatar
 python3 tools/glb_inspect.py export/avatar.glb
 ```
 
-Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py` y `add_face_parts.py`. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`). `add_face_parts.py` también (borra lo que creó antes).
+Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py` y `add_face_parts.py`. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`). `add_face_parts.py` también (borra lo que creó antes). `check_rig.py` va después de `add_face_parts.py` porque exige los huesos y objetos faciales.
 
-Pasos que usan Higgsfield (créditos) y no se repiten salvo que cambie el personaje: lámina del personaje (nano_banana_pro), malla rigueada (Meshy `multi_image_to_3d`), imágenes de la moto y la ventana, malla de la moto (`image_to_3d`). Los resultados están en `generated/`.
+Landmarks de la cara: `blender/landmarks.json` está versionado y calibrado a mano (posición de ojos, cejas y lóbulos, tono de piel). `render_face_grid.py` solo escribe una versión automática (con las orejas en `[0,0,0]`) si el archivo no existe, y sirve para producir los renders con rejilla (`generated/renders/face_grid_*.png`) con los que se calibra. `add_face_parts.py` falla si falta una clave o si las orejas siguen en `[0,0,0]`.
+
+Pasos que usan Higgsfield (créditos) y no se repiten salvo que cambie el personaje: lámina del personaje (nano_banana_pro), malla rigueada (Meshy `multi_image_to_3d`), imágenes de la moto y la ventana, malla de la moto (`image_to_3d`). Los resultados están en `generated/` (ver "Insumos irremplazables").
+Si falta alguno, `build_scene.py` imprime `WARNING PLACEHOLDER ...` (y `check_scene.py` falla), y `assemble.py` falla al no encontrar la moto.
+
+## Insumos irremplazables
+
+`generated/` está ignorado por git, pero parte de su contenido salió de Higgsfield y NO se puede regenerar sin gastar créditos. Hay que respaldarlos aparte (copia fuera del repo o un bucket) antes de clonar en otra máquina:
+
+| Archivo | Origen | Regenerable |
+|---|---|---|
+| `generated/meshy/character_rigged.glb` | Meshy `multi_image_to_3d` (70 créditos) | no |
+| `generated/moto/dr150.glb` | Meshy `image_to_3d` (30 créditos) | no |
+| `generated/window/medellin.png` | imagen Higgsfield | no |
+| `generated/sheet/*` | láminas del personaje (nano_banana_pro) | no (son la fuente de la malla) |
+| `generated/screens/*` | `tools/screens/make_screens.sh` (Chrome headless) | sí |
+| `export/avatar.glb`, `export/avatar_uncompressed.glb` | `export_glb.py` | sí, pero también están ignorados: guardar una copia del entregable |
+
+El registro de decisiones y reportes de tareas del proceso SDD vive en `.superpowers/` y es solo local (ignorado por git); el estado del proyecto para continuar está en `docs/HANDOFF.md`.
 
 La pose sentada se calibra con `pose_probe.py` (12 renders de sonda) y vive en `poses.py`; `sit_test.py` la prueba dentro de la escena y sus funciones de colocación las reutiliza `assemble.py`.
 
@@ -54,7 +72,7 @@ La pose sentada se calibra con `pose_probe.py` (12 renders de sonda) y vive en `
 
 Huesos de deformación (convención tipo Rigify sin puntos):
 
-`spine`, `spine001`, `spine002`, `spine003`, `spine005`, `spine006` (cabeza), `shoulderL/R`, `upper_armL/R`, `forearmL/R`, `handL/R`, `thighL/R`, `shinL/R`, `footL/R`, `toeL/R`, `eyelidL/R`, `eyebrow_L/R`. No hay dedos (el rig de Meshy no los trae).
+`spine`, `spine001`, `spine002`, `spine003`, `spine005`, `spine006` (cabeza), `shoulderL/R`, `upper_armL/R`, `forearmL/R`, `handL/R`, `thighL/R`, `shinL/R`, `footL/R`, `toeL/R`, `eyelidL/R`, `eyebrow_L/R`. No hay dedos (el rig de Meshy no los trae). El skin del GLB incluye además dos articulaciones de deformación heredadas de Meshy, `headfront` y `head_end`, hijas de `spine006`: no las anima ningún clip, pero siguen a la cabeza y hay que dejarlas (tienen pesos).
 
 Convenciones faciales: `eyelidL/R` girado +70° en X local = ojo cerrado; `eyebrow_L/R` desplazado +0.012 en Z local = ceja levantada.
 
