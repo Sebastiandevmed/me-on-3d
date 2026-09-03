@@ -6,7 +6,9 @@
 #      Meshy sangra en los bordes con mipmaps/JPEG y se ve como motas cafes en el hoodie;
 #   3. mediana 3x3 (dos pasadas) SOLO en pixeles oscuros (luminancia < DARK): quita el ruido
 #      de la ropa negra sin tocar la cara.
-# Guarda generated/character_texture_clean.png, apunta el material a ella y guarda character.blend.
+# Guarda generated/character_texture_clean.png y generated/character_uv_mask.png (blanco = isla,
+# negro = hueco entre islas, usada por el check para medir la fuga de piel solo en los huecos),
+# apunta el material a la textura limpia y guarda character.blend.
 # Idempotente: parte SIEMPRE de generated/character_texture_logo.png (salida de apply_chest_logo.py).
 # Uso: tools/run_blender.sh blender/character.blend blender/scripts/fix_character_material.py
 import sys, os
@@ -26,6 +28,8 @@ ROUGHNESS = 0.85
 def uv_mask(body, size):
     """Mascara booleana (size x size) con True en los texeles cubiertos por triangulos UV."""
     me = body.data
+    if me.uv_layers.active is None:
+        common.fail('Body sin capa UV activa')
     uv = me.uv_layers.active.data
     mask = np.zeros((size, size), dtype=bool)
     tris = []
@@ -101,12 +105,30 @@ def main():
     print('TEXCLEAN mascara islas', round(float(mask.mean()), 4), 'de la textura')
     if not (0.15 < mask.mean() < 0.95):
         common.fail('la mascara UV cubre una fraccion improbable de la textura')
+
+    # se guarda la mascara como PNG (blanco = dentro de isla, negro = hueco entre islas) para que
+    # el check pueda medir el color piel SOLO en los huecos, no en toda la textura (la piel real
+    # de la cara esta dentro de las islas y no debe contarse como fuga). Misma orientacion de filas
+    # que la textura al guardar (bpy guarda de abajo a arriba: se voltea igual que rgb mas abajo).
+    mask_path = os.path.join(common.GEN, 'character_uv_mask.png')
+    mask_img = bpy.data.images.get('character_uv_mask') or bpy.data.images.new('character_uv_mask', SIZE, SIZE, alpha=False)
+    mask_img.scale(SIZE, SIZE)
+    mbuf = np.ones((SIZE, SIZE, 4), dtype=np.float32)
+    mbuf[..., :3] = mask[::-1, :, None].astype(np.float32)
+    mask_img.pixels.foreach_set(mbuf.ravel())
+    mask_img.filepath_raw = mask_path; mask_img.file_format = 'PNG'
+    mask_img.save(); mask_img.reload()
+    print('TEXCLEAN mascara UV guardada', mask_path)
+
     rgb = dilate_colors(img, mask, PAD)
     # lo que queda sin rellenar (canales anchos) toma el color medio de la ropa (oscuro) en vez de piel
     filled = mask.copy()
     for _ in range(PAD):
         filled |= np.roll(filled, 1, 0) | np.roll(filled, -1, 0) | np.roll(filled, 1, 1) | np.roll(filled, -1, 1)
-    dark_mean = np.median(img[mask & (img.mean(axis=2) < DARK)], axis=0)
+    dark_sel = mask & (img.mean(axis=2) < DARK)
+    if not dark_sel.any():
+        common.fail('no hay pixeles oscuros dentro de la mascara UV para calcular el color de relleno lejano')
+    dark_mean = np.median(img[dark_sel], axis=0)
     rgb[~filled] = dark_mean
     print('TEXCLEAN color de relleno lejano', [round(float(c), 3) for c in dark_mean])
 
