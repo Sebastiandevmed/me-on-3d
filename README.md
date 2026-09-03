@@ -4,7 +4,7 @@ Avatar cartoon de Sebastián sentado tecleando en su escritorio, dentro de una h
 
 Entregables:
 
-- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 49 390 triángulos, **9.76 MiB (10.2 MB en disco)**. El `BUDGET` de `export_glb.py` es 10 MiB, así que queda a ~2.4 % del tope: casi todo el peso son las texturas (personaje JPEG `CHAR_QUALITY = 92` a 2048 px y ventana `medellin` a 1504 px sin reescalar, vía `TEX_LIMITS`), y esas dos son la palanca para bajarlo si hay que meter algo nuevo.
+- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 49 390 triángulos, **2.61 MiB (2.7 MB en disco)**. El `BUDGET` de `export_glb.py` es 10 MiB, así que usa el 26 % del presupuesto y sobra un 74 %. Casi todo el peso siguen siendo las texturas, todas en JPEG (personaje `CHAR_QUALITY = 92` a 2048 px = 880 KiB, ventana `medellin` a 1504 px sin reescalar vía `TEX_LIMITS` = 385 KiB, moto 1024 px = 459 KiB): son la palanca para bajarlo si hiciera falta.
 - `export/avatar_uncompressed.glb` — la misma escena sin Draco (depuración).
 - `export/night.hdr` — entorno nocturno 1024×512 para la iluminación.
 - `export/preview.html` + `tools/serve_preview.sh` — visor local de referencia (three.js).
@@ -110,7 +110,7 @@ Tres cosas que cambian respecto a versiones anteriores del GLB:
 
 - El material `Character` **ya no trae emisión** (`fix_character_material.py` la apaga y deja Metallic 0 / Roughness 0.85 / Specular Tint blanco): el personaje se ve solo con las luces de la escena, así que hace falta iluminarlo (el visor de referencia usa un spot azulado, un point cálido de techo, un `RectAreaLight` en la ventana, una hemisférica y luces puntuales por pantalla y por barra RGB).
 - La textura de la ventana (`medellin`) se exporta a **1504 px de ancho sin reescalar** (ocupa media pantalla; el resto de texturas van a 1024 y la del personaje a 2048).
-- El visor de referencia **enciende sombras** (`renderer.shadowMap.enabled = true`, `PCFSoftShadowMap`) y excluye de `castShadow` a las pantallas, la ventana, el piso, el techo y las paredes; si no se encienden, la habitación se ve plana.
+- El visor de referencia **enciende sombras** (`renderer.shadowMap.enabled = true`, `PCFSoftShadowMap`) y excluye de `castShadow` a las pantallas, el plano de la vista de Medellín (`window_far`), el piso, el techo y las paredes; el marco de la ventana (`window_near`, `window_head`, `window_post_*`) sí proyecta sombra. Si no se encienden, la habitación se ve plana.
 
 
 ```js
@@ -151,7 +151,8 @@ loader.load('avatar.glb', (gltf) => {
   mixer.addEventListener('finished', (e) => {
     if (e.action === act.introAnimation) ['idle', 'typing', 'Blink'].forEach((n) => act[n].reset().fadeIn(0.5).play());
   });
-  // en el bucle de render: mixer.update(dt); después, girar `head` (y `spine003` un 30%) hacia el cursor (±30°, lerp 0.08).
+  // en el bucle de render: mixer.update(dt); después, girar `head` (y `spine003` un 30%) hacia el cursor
+  // (yaw ±45°, pitch −20°/+25°; ver YAW_MAX / PITCH_UP / PITCH_DOWN en preview.html).
   // Los audífonos cuelgan del hueso 'headphones', hijo de la cabeza: tras girarla hay que premultiplicar
   // hp.quaternion por (head_nuevo^-1 · head_viejo) para que no se despeguen del cuello.
 });
@@ -159,7 +160,7 @@ loader.load('avatar.glb', (gltf) => {
 
 `export/preview.html` contiene la versión completa (luces y sombras de la habitación, fundido de pantallas, ciclo de color de las barras, botones `vibe`/`browup`/`lookAround`, `vibe` automático, clic sobre el personaje = `vibe` y seguimiento del cursor con cabeza + pecho). Para verlo: `tools/serve_preview.sh` y abrir <http://localhost:8765/preview.html>.
 
-`node tools/preview_probe.mjs` lo abre en Chrome headless (CDP), comprueba que no haya errores de página (`PROBE errors []`) y guarda `generated/renders/preview_shot.png`, `preview_shot_look.png` (cabeza girada hacia el cursor) y `preview_shot_vibe.png` (audífonos subiendo). La sonda desactiva el caché HTTP: el perfil de Chrome sobrevive entre corridas y, sin eso, mide un `avatar.glb` viejo.
+`node tools/preview_probe.mjs` lo abre en Chrome headless (CDP) y falla (salida 1 con `PROBE FAIL ...`) si el visor no carga, si hay errores de página (`PROBE errors []`), si el nodo `headphones` no llega del GLB (`hpQ` null), si no hay sombras, si no hay 9 luces o si la cabeza no gira al mover el cursor (distancia entre cuaterniones < 0.1). Guarda `generated/renders/preview_shot.png`, `preview_shot_look.png` (cabeza girada hacia el cursor) y `preview_shot_vibe.png` (audífonos subiendo). La sonda desactiva el caché HTTP: el perfil de Chrome sobrevive entre corridas y, sin eso, mide un `avatar.glb` viejo.
 
 ## Créditos Higgsfield
 
