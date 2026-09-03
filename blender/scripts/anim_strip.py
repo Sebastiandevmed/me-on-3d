@@ -53,10 +53,11 @@ BODY = ((0.85, 1.75, 1.34), (0.0, 0.05, 1.16), 50)
 FACE = ((0.22, 0.90, 1.50), (0.0, 0.10, 1.585), 58)
 
 SHOTS = [
-    # vibe v2 (216 f): copas en el cuello (20), audifonos a media altura (32), puestos (44),
-    # manos de vuelta al teclado (76), cabeceo (100), manos a las copas (168), bajada (186).
-    ('vibe', BODY, (1, 20, 32, 44, 76, 100, 168, 186, 216)),
-    ('vibeface', FACE, (20, 32, 44, 100, 180, 192), 'vibe'),
+    # vibe v2 (216 f): viaje por delante del pecho (11), copas en el cuello (20), audifonos a
+    # media altura (32), puestos (44), vuelta al teclado (64, 76), cabeceo (100), manos a las
+    # copas (168) y bajada (186).
+    ('vibe', BODY, (1, 11, 20, 32, 44, 64, 100, 168, 186, 204, 216)),
+    ('vibeface', FACE, (11, 20, 32, 44, 168, 186), 'vibe'),
     ('typing', BODY, (1, 13, 25, 37)),
     ('introAnimation', BODY, (1, 18, 36, 52, 72)),
     ('idle', BODY, (1, 13, 25, 37, 49)),

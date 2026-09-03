@@ -98,6 +98,47 @@ def aim(arm, bone, direction):
     return tuple(pb.rotation_euler)
 
 
+
+# Normal de la PALMA en el espacio local del hueso hand{L,R}. Medida sobre la malla deformada:
+# eje mas delgado de la nube de vertices de la mano (PCA) desambiguado con la curvatura de los
+# dedos (las yemas se doblan HACIA la palma); sale igual en reposo y en SIT. No coincide con
+# ningun eje local puro: la palma mira a -0.75 X + 0.65 Z en handL y a +0.75 X + 0.65 Z en handR
+# (los huesos del brazo derecho son espejo en X). En SIT la palma queda mirando hacia adentro.
+PALM_LOCAL = {'L': (-0.750, -0.120, 0.650), 'R': (0.751, -0.118, 0.650)}
+
+
+def aim_roll(arm, bone, direction, palm, palm_local):
+    """Como `aim()` pero fijando TAMBIEN el giro del hueso sobre su propio eje.
+
+    `aim()` usa la rotacion minima (`rotation_difference`), asi que clava la direccion del hueso
+    pero deja el roll al azar: en una mano eso significa que la palma acaba mirando a cualquier
+    lado. Aqui se construye la orientacion completa: el +Y local del hueso va a `direction` y
+    `palm_local` (p.ej. `PALM_LOCAL[lado]`) va a `palm`. Los dos objetivos van en coordenadas
+    del mundo y se ortogonalizan entre si; manda `direction`.
+    """
+    import bpy
+    from mathutils import Vector, Matrix
+
+    def frame(d, p):
+        e1 = Vector(d).normalized()
+        e2 = Vector(p) - e1 * Vector(p).dot(e1)
+        if e2.length < 1e-6:
+            raise ValueError(f'aim_roll({bone!r}): la palma es paralela a la direccion del hueso')
+        e2.normalize()
+        return Matrix((e1, e2, e1.cross(e2))).transposed()   # columnas = e1, e2, e3
+
+    pb = arm.pose.bones[bone]
+    pb.rotation_mode = 'XYZ'
+    pb.rotation_euler = (0, 0, 0)
+    bpy.context.view_layer.update()
+    m = (arm.matrix_world @ pb.matrix).to_3x3().inverted()
+    src = frame((0.0, 1.0, 0.0), palm_local)
+    dst = frame(m @ Vector(direction), m @ Vector(palm))
+    pb.rotation_euler = (dst @ src.transposed()).to_euler('XYZ')
+    bpy.context.view_layer.update()
+    return tuple(pb.rotation_euler)
+
+
 # Altura a la que hay que subir la articulacion de la cadera sobre `seat_anchor` (tope del
 # asiento, z=0.47) para que el muslo apoye por su eje y no por su piel: ~medio grosor de muslo.
 SEAT_LIFT = 0.07

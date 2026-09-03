@@ -188,10 +188,12 @@ def seg_len(parent, child):
     return (arm.data.bones[child].head_local - arm.data.bones[parent].head_local).length
 
 
-def reach(side, wrist_world, hand_dir, elbow_hint=None):
+def reach(side, wrist_world, hand_dir, palm_dir, elbow_hint=None):
     """IK analitica de dos huesos: coloca la muneca (cabeza de hand<side>) en `wrist_world`.
 
-    Devuelve {upper_arm, forearm, hand: euler}. El resto de la pose debe estar aplicada.
+    `hand_dir` es hacia donde apuntan los dedos y `palm_dir` hacia donde mira la palma (los dos
+    en el mundo). Devuelve {upper_arm, forearm, hand: euler}. El resto de la pose debe estar
+    aplicada.
     """
     s = side
     ua, fa, ha = f'upper_arm{s}', f'forearm{s}', f'hand{s}'
@@ -213,7 +215,8 @@ def reach(side, wrist_world, hand_dir, elbow_hint=None):
     E = S + (d * math.cos(a) + perp * math.sin(a)) * L1
     out = {ua: poses.aim(arm, ua, tuple(E - S))}
     out[fa] = poses.aim(arm, fa, tuple(T - E))
-    out[ha] = poses.aim(arm, ha, tuple(Vector(hand_dir)))
+    out[ha] = poses.aim_roll(arm, ha, tuple(Vector(hand_dir)), tuple(Vector(palm_dir)),
+                             poses.PALM_LOCAL[s])
     return out
 
 
@@ -351,7 +354,8 @@ finish(act, 18, cyclic=False)
 
 # --------------------------------------------------------------------------- 5) vibe
 # 216 frames (9 s a 24 fps): se pone los audifonos con las manos, cabecea y se los quita.
-#   f1-20    las manos suben del teclado a las copas (audifonos colgando del cuello)
+#   f1-20    las manos suben del teclado a las copas (audifonos colgando del cuello), por un
+#            arco por delante del pecho (key intermedio en f11)
 #   f20-44   las manos llevan los audifonos a la cabeza (hueso headphones: reposo -> puestos)
 #   f44-52   ajuste (pausa)
 #   f52-76   las manos vuelven al teclado
@@ -365,20 +369,27 @@ finish(act, 18, cyclic=False)
 VIBE_BONES = [HEAD, NECK, 'spine003', 'shoulderL', 'shoulderR'] + LIDS + ARM_BONES + [HP]
 VIBE_LEN = 216
 BEAT = 15.0
-# Muneca = centro de la copa + WRIST_OFF: 4 cm hacia AFUERA (L esta en -X, asi que afuera = -X
-# para L) y 8 cm abajo, como sujetando la copa por debajo. HAND_DIR inclina la mano hacia
-# AFUERA: este rig no tiene huesos de dedos y `poses.aim()` no controla el giro sobre el eje del
-# hueso, asi que con la mano apuntando hacia adentro (el (+0.25,...) del borrador) la ANCHURA de
-# la palma cruza por delante del pomulo y lo atraviesa. Medido sobre la malla deformada en
-# u = 0 / 0.2 / 0.43 / 0.7 / 1: holgura mano-cara 5.3 / 4.4 / 2.8 / 3.1 / 5.5 cm, y el vertice
-# de la mano mas cercano al centro de la copa se queda a 1.3 / 1.1 / 0.7 / 2.3 / 4.2 cm (radio
-# de la copa: 4.5 cm), o sea la mano toca la copa en todo el recorrido.
-WRIST_OFF = lambda s: Vector((SX[s] * -0.04, 0.0, -0.08))
-HAND_DIR = lambda s: (SX[s] * -0.20, 0.30, 0.94)
+# AGARRE de la copa: la palma apoyada en su cara EXTERIOR mirando hacia la cabeza y los dedos
+# subiendo hacia atras (~45 grados), envolviendola. Es la MISMA pose relativa a la copa en el
+# cuello (u=0) y en la cabeza (u=1): la mano sigue a la copa sin cambiar de agarre.
+# `poses.aim()` solo fija la direccion del hueso, no su giro sobre el propio eje, y la mano
+# salia con la palma al frente y los dedos rectos hacia arriba ("manos de jazz"); por eso la
+# mano se resuelve con `poses.aim_roll()`, que ademas apunta la palma.
+WRIST_OFF = lambda s: Vector((SX[s] * -0.058, 0.03, -0.045))   # afuera, algo adelante y abajo
+HAND_DIR = (0.0, -0.50, 0.85)                    # dedos arriba y ATRAS (mira a +Y: atras = -Y)
+PALM_DIR = lambda s: (SX[s] * 1.0, 0.0, 0.0)     # la palma mira hacia la cabeza
+ELBOW_HINT = lambda s: (SX[s] * -1.0, 0.25, -0.6)   # codo al costado, algo adelante y abajo
+# Arco del viaje teclado <-> copas: la muneca pasa por delante del pecho, no por el costado.
+TRAVEL_ARC = lambda s: Vector((SX[s] * -0.03, 0.08, 0.0))
 
 
 def smooth(u):
     return u * u * (3 - 2 * u)
+
+
+poses.apply(arm, SIT)
+bpy.context.view_layer.update()
+SIT_WRIST = {s: (arm.matrix_world @ arm.pose.bones[f'hand{s}'].head).copy() for s in 'LR'}
 
 
 def hands_to_cups(f, u_hp):
@@ -392,7 +403,23 @@ def hands_to_cups(f, u_hp):
     key(HP, f, euler=eul, loc=loc)
     for s in 'LR':
         cw = cup_world(s, u_hp)
-        key_pose(f, reach(s, cw + WRIST_OFF(s), HAND_DIR(s)))
+        key_pose(f, reach(s, cw + WRIST_OFF(s), HAND_DIR, PALM_DIR(s), ELBOW_HINT(s)))
+
+
+def hands_travel(f, u_hp, t):
+    """Key intermedio del viaje teclado <-> copas (t = 0 teclado, 1 copas).
+
+    Sin el, el bezier entre "palmas sobre el teclado" y el agarre pasaba por una pose de manos
+    abiertas al frente. Aqui la muneca describe un arco por delante del pecho y los dedos giran
+    de "adelante" (teclado) a "arriba y atras" (copa) con la palma ya mirando hacia adentro.
+    """
+    poses.apply(arm, SIT)
+    eul, loc = hp_state(u_hp)
+    key(HP, f, euler=eul, loc=loc)
+    for s in 'LR':
+        goal = cup_world(s, u_hp) + WRIST_OFF(s)
+        w = Vector(lerp3(SIT_WRIST[s], goal, t)) + TRAVEL_ARC(s) * math.sin(math.pi * t)
+        key_pose(f, reach(s, w, lerp3(DIR_HAND(s), HAND_DIR, t), PALM_DIR(s), ELBOW_HINT(s)))
 
 
 def key_arms_sit(f):
@@ -413,8 +440,9 @@ def nod(f, env):
 
 act = new_action('vibe', VIBE_BONES)
 key(HP, 1, euler=(0, 0, 0), loc=(0, 0, 0))
-# fase 1: teclado -> copas en el cuello (bezier entre el SIT de f1 y las copas de f20)
+# fase 1: teclado -> copas en el cuello
 key_arms_sit(1)
+hands_travel(11, 0.0, 0.5)
 hands_to_cups(20, 0.0)
 # fase 2: subir los audifonos
 for f, u in ((26, 0.15), (32, 0.45), (38, 0.8), (44, 1.0)):
@@ -422,6 +450,7 @@ for f, u in ((26, 0.15), (32, 0.45), (38, 0.8), (44, 1.0)):
 # fase 3: ajuste
 hands_to_cups(52, 1.0)
 # fase 4: manos al teclado (los audifonos se quedan puestos)
+hands_travel(64, 1.0, 0.5)
 key_arms_sit(76)
 key(HP, 76, euler=HP_ON[0], loc=HP_ON[1])
 # fase 5: cabeceo (la cabeza vuelve a SIT justo antes de la fase 6). El key de brazos en 152
@@ -433,11 +462,13 @@ for f in range(60, 153, 2):
 key_arms_sit(152)
 key(HP, 152, euler=HP_ON[0], loc=HP_ON[1])
 # fase 6: manos a las copas (en la cabeza)
+hands_travel(160, 1.0, 0.5)
 hands_to_cups(168, 1.0)
 # fase 7: bajar los audifonos
 for f, u in ((174, 0.8), (180, 0.45), (186, 0.15), (192, 0.0)):
     hands_to_cups(f, smooth(u))
 # fase 8: manos al teclado, todo en SIT
+hands_travel(204, 0.0, 0.5)
 key_arms_sit(216)
 key(HP, 216, euler=(0, 0, 0), loc=(0, 0, 0))
 for b in (HEAD, NECK, 'spine003'):
