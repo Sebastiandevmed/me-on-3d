@@ -68,10 +68,20 @@ def main():
     arm.location.z -= min(zs)
     bpy.ops.object.transform_apply(location=True, rotation=False, scale=False)
 
-    # 3. orientación: la cara debe mirar a +Y. Por defecto rotar 180° en Z si el argumento --flip está presente.
-    if '--flip' in common.args():
+    # 3. orientación: la cara debe mirar a +Y. Se detecta con el hueso 'headfront' (Meshy lo coloca
+    #    delante de la cara, hijo de Head/spine006): si su cabeza queda en el lado -Y de spine006, el
+    #    personaje mira a -Y y se rota 180° en Z. '--flip' invierte el resultado (override manual).
+    hf = arm.data.bones.get('headfront'); s6 = arm.data.bones.get('spine006')
+    if hf is None or s6 is None:
+        raise RuntimeError('faltan los huesos headfront/spine006 para detectar la orientación')
+    dy = (arm.matrix_world @ hf.head_local).y - (arm.matrix_world @ s6.head_local).y
+    faces_neg_y = dy < 0
+    flip = faces_neg_y != ('--flip' in common.args())
+    print('FACING', 'dy_headfront=', round(dy, 4), '-> rotar 180°' if flip else '-> ok (+Y)')
+    if flip:
+        arm.rotation_mode = 'XYZ'  # el importador glTF deja QUATERNION y rotation_euler se ignoraría
         arm.rotation_euler = (0, 0, math.pi)
-        bpy.ops.object.transform_apply(rotation=True)
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
 
     for i, m in enumerate(meshes):
         m.name = 'Body' if i == 0 else f'Body_{i}'
@@ -101,8 +111,9 @@ def main():
             md = m.modifiers.new('Armature', 'ARMATURE'); md.object = arm
 
     # 5. render de control
-    common.add_camera((0, -3.2, 1.0), (0, 0, 0.9), lens=50)
-    common.add_light('k', 'AREA', (1.5, -2, 2.5), 300, size=1.5)
+    # cámara en +Y (el personaje ya mira a +Y): el render debe mostrar la cara.
+    common.add_camera((0, 3.2, 1.0), (0, 0, 0.9), lens=50)
+    common.add_light('k', 'AREA', (-1.5, 2, 2.5), 300, size=1.5)
     common.render(os.path.join(common.RENDERS, 'character_imported.png'), res=(720, 1000))
     print('CHAR_TRIS', sum(common.tri_count(m) for m in meshes))
     common.save(os.path.join(common.BLEND_DIR, 'character.blend'))
