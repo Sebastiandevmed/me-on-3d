@@ -10,8 +10,24 @@ need = ['spine', 'spine001', 'spine002', 'spine003', 'spine005', 'spine006',
         'upper_armL', 'forearmL', 'handL', 'upper_armR', 'forearmR', 'handR',
         'thighL', 'shinL', 'footL', 'thighR', 'shinR', 'footR',
         'shoulderL', 'shoulderR', 'toeL', 'toeR', 'headfront']
+need += ['eyelidL', 'eyelidR', 'eyebrow_L', 'eyebrow_R']
 missing = [n for n in need if n not in names]
 if missing: common.fail(f'faltan huesos {missing}')
+for o in ('earring_L1', 'earring_L2', 'earring_R1', 'earring_R2',
+          'eyelid_L', 'eyelid_R', 'eyebrow_L_mesh', 'eyebrow_R_mesh'):
+    ob = bpy.data.objects.get(o)
+    if not ob: common.fail(f'falta objeto {o}')
+    if ob.parent_type != 'BONE': common.fail(f'{o} no esta parentado a hueso')
+# convencion Task 8/9: +70 grados en X local del parpado = ojo cerrado, y +0.012 en Z
+# local de la ceja = ceja levantada. Solo se cumple si los ejes locales de esos huesos
+# coinciden con los del mundo, asi que se verifica aqui.
+for bn in ('eyelidL', 'eyelidR', 'eyebrow_L', 'eyebrow_R'):
+    m = (arm.matrix_world @ arm.data.bones[bn].matrix_local).to_3x3()
+    lx = (m @ Vector((1, 0, 0))).normalized()
+    lz = (m @ Vector((0, 0, 1))).normalized()
+    if lx.dot(Vector((1, 0, 0))) < 0.999: common.fail(f'{bn}: X local no es +X de mundo ({lx[:]})')
+    if lz.dot(Vector((0, 0, 1))) < 0.999: common.fail(f'{bn}: Z local no es +Z de mundo ({lz[:]})')
+
 meshes = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('Body')]
 if not meshes: common.fail('no hay malla Body')
 tris = sum(common.tri_count(m) for m in meshes)
