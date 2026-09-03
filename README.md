@@ -4,7 +4,7 @@ Avatar cartoon de Sebastián sentado tecleando en su escritorio, dentro de una h
 
 Entregables:
 
-- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 49 390 triángulos, **9.99 MiB (10.2 MB en disco)**. El `BUDGET` de `export_glb.py` es 10 MiB, así que queda a ~2.4 % del tope: casi todo el peso son las texturas (personaje JPEG `CHAR_QUALITY = 92` a 2048 px y ventana `medellin` a 1504 px sin reescalar, vía `TEX_LIMITS`), y esas dos son la palanca para bajarlo si hay que meter algo nuevo.
+- `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 49 390 triángulos, **9.76 MiB (10.2 MB en disco)**. El `BUDGET` de `export_glb.py` es 10 MiB, así que queda a ~2.4 % del tope: casi todo el peso son las texturas (personaje JPEG `CHAR_QUALITY = 92` a 2048 px y ventana `medellin` a 1504 px sin reescalar, vía `TEX_LIMITS`), y esas dos son la palanca para bajarlo si hay que meter algo nuevo.
 - `export/avatar_uncompressed.glb` — la misma escena sin Draco (depuración).
 - `export/night.hdr` — entorno nocturno 1024×512 para la iluminación.
 - `export/preview.html` + `tools/serve_preview.sh` — visor local de referencia (three.js).
