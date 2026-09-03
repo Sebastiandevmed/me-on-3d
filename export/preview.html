@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Avatar preview</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font:13px -apple-system,Helvetica,sans-serif;color:#ddd}
+  canvas{display:block}
+  #ui{position:fixed;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}
+  button{background:#111;color:#eee;border:1px solid #333;border-radius:8px;padding:8px 12px;cursor:pointer;font:inherit}
+  button:hover{border-color:#3b82f6}
+  button:disabled{opacity:.4;cursor:default}
+  #help{position:fixed;left:12px;bottom:12px;opacity:.6;max-width:60vw;line-height:1.5}
+  #info{position:fixed;right:12px;bottom:12px;opacity:.8;text-align:right;line-height:1.5;white-space:pre}
+  #err{position:fixed;right:12px;top:12px;max-width:50vw;color:#ff6b6b;background:rgba(40,0,0,.7);padding:6px 10px;border-radius:8px;white-space:pre-wrap;font:12px Menlo,monospace;display:none;z-index:3}
+</style>
+<script>
+  // Errores visibles en pantalla (también en la captura headless).
+  window.__errors = [];
+  const showErr = (m) => { window.__errors.push(m); const e = document.getElementById('err'); if (e) { e.style.display = 'block'; e.textContent = window.__errors.join('\n'); } };
+  window.addEventListener('error', (ev) => showErr('error: ' + (ev.message || ev.type) + (ev.filename ? ' @ ' + ev.filename.split('/').pop() + ':' + ev.lineno : '')), true);
+  window.addEventListener('unhandledrejection', (ev) => showErr('unhandled: ' + (ev.reason && ev.reason.message || ev.reason)));
+  const _ce = console.error.bind(console); console.error = (...a) => { showErr('console.error: ' + a.map(String).join(' ')); _ce(...a); };
+  const _cw = console.warn.bind(console); console.warn = (...a) => { showErr('console.warn: ' + a.map(String).join(' ')); _cw(...a); };
+</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head><body>
+<div id="ui">
+  <button data-clip="vibe" disabled>vibe</button>
+  <button data-clip="browup" disabled>browup</button>
+  <button data-clip="lookAround" disabled>lookAround</button>
+  <button data-clip="introAnimation" disabled>intro</button>
+  <button id="resetCam">reset camera</button>
+</div>
+<div id="err"></div>
+<div id="help">Arrastra para orbitar, rueda para zoom. La cabeza sigue el cursor. Clic sobre el personaje = vibe (también automático cada 20-40 s).</div>
+<div id="info">cargando…</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const info = document.getElementById('info');
+const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '', headQ: () => head && head.quaternion.toArray(), barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = false; document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060a);
+
+// Cámara de aprobación: Blender (-1.3, 3.7, 1.95) mirando a (0, 0.6, 1.0)  ->  glTF Y-up (x, z, -y).
+// El personaje mira a -Z en glTF (+Y en Blender). Lente 35 mm ≈ 38° vertical (ajustado al encuadre de assembled_v1.png).
+const CAM_POS = new THREE.Vector3(-1.3, 1.95, -3.7), CAM_TGT = new THREE.Vector3(0, 1.0, -0.6);
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 100);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.6; controls.maxDistance = 12;
+const resetCamera = () => { camera.position.copy(CAM_POS); controls.target.copy(CAM_TGT); controls.update(); };
+resetCamera(); document.getElementById('resetCam').onclick = resetCamera;
+
+// Luces como en build_scene.py: key AREA azulada en Blender (-1.2, 2.4, 2.2) -> glTF (-1.2, 2.2, -2.4);
+// screen_glow AREA en Blender (0, 1.3, 1.1) -> glTF (0, 1.1, -1.3). Pantallas, barras RGB y ventana son emisivas.
+const key = new THREE.SpotLight(0xbfd9ff, 30, 0, Math.PI / 3.2, 0.8, 2); key.position.set(-1.2, 2.2, -2.4); key.target.position.copy(CAM_TGT); scene.add(key, key.target);
+const glow = new THREE.PointLight(0x99bfff, 4, 5, 2); glow.position.set(0, 1.1, -1.3); scene.add(glow);
+scene.add(new THREE.AmbientLight(0x2a3a5c, 0.8));
+
+new RGBELoader().load('night.hdr', (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
+  undefined, (e) => console.error('night.hdr: ' + (e.message || e)));
+
+const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
+const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
+
+let mixer = null, actions = {}, head = null, screens = [], bars = [], character = null;
+const clock = new THREE.Clock();
+const mouse = { x: 0, y: 0 };
+addEventListener('mousemove', e => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---- mezcla de clips ----
+// idle = base continua; typing y Blink se superponen (huesos disjuntos); browup se superpone a todo.
+// vibe / lookAround / intro son EXCLUSIVOS: apagan idle+typing (vibe también Blink), corren una vez y luego vuelve la base.
+const BASE = ['idle', 'typing', 'Blink'];
+const EXCLUSIVE = { vibe: { fade: 0.5, dropBlink: true }, lookAround: { fade: 0.4, dropBlink: false }, introAnimation: { fade: 0.5, dropBlink: false } };
+let exclusive = null;            // nombre del clip exclusivo en curso
+let followWeight = 0;            // peso del seguimiento de cursor (baja a 0 durante vibe/lookAround)
+let headClipQ = null;            // cuaternión de spine006 tal como lo dejan los clips (sin el offset del cursor)
+// idle no anima spine006, así que nadie "reescribe" el hueso cada frame: hay que deshacer el offset antes del mixer
+// y antes de arrancar cualquier acción (si no, el mixer guardaría el offset como pose de reposo y se acumularía).
+const undoFollow = () => { if (head && headClipQ) head.quaternion.copy(headClipQ); };
+
+const playLoop = (n, fade = 0.5) => { const a = actions[n]; if (!a) return; undoFollow(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.clampWhenFinished = false; a.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play(); };
+const playOnce = (n, fade, cb) => {
+  const a = actions[n]; if (!a) return;
+  undoFollow(); a.enabled = true; a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+  a.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play();
+  const onEnd = (e) => { if (e.action === a) { mixer.removeEventListener('finished', onEnd); cb && cb(); } };
+  mixer.addEventListener('finished', onEnd);
+};
+const startBase = (fade, skipBlink = false) => { for (const n of BASE) { if (skipBlink && n === 'Blink') continue; if (actions[n] && !actions[n].isRunning()) playLoop(n, fade); } };
+const stopBase = (fade, dropBlink) => { for (const n of BASE) { if (n === 'Blink' && !dropBlink) continue; if (actions[n] && actions[n].isRunning()) actions[n].fadeOut(fade); } };
+const playExclusive = (n) => {
+  if (exclusive || !actions[n]) return false;
+  const cfg = EXCLUSIVE[n]; exclusive = n;
+  stopBase(cfg.fade, cfg.dropBlink);
+  playOnce(n, cfg.fade, () => { actions[n].fadeOut(cfg.fade); startBase(cfg.fade); exclusive = null; });
+  return true;
+};
+const vibe = () => playExclusive('vibe');
+const browup = () => { const a = actions.browup; if (!a || a.isRunning()) return; playOnce('browup', 0.1, () => a.fadeOut(0.15)); };
+
+loader.load('avatar.glb', (gltf) => {
+  scene.add(gltf.scene);
+  gltf.scene.traverse(o => {
+    if (o.isMesh) { o.frustumCulled = false; }
+    if (/^screen_/.test(o.name) && o.isMesh) screens.push(o);
+    if (/^rgb_bar_/.test(o.name) && o.isMesh) bars.push(o);
+    if (o.name === 'spine006') { head = o; headClipQ = o.quaternion.clone(); }
+    if (o.name === 'Body') character = o;
+  });
+  mixer = new THREE.AnimationMixer(gltf.scene);
+  for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
+  status.loaded = true;
+  status.clips = () => Object.entries(actions).filter(([, a]) => a.isRunning()).map(([n, a]) => n + (a.getEffectiveWeight() < 0.99 ? '(' + a.getEffectiveWeight().toFixed(2) + ')' : '')).join(' + ') || '—';
+  // intro una vez, luego fundido a idle + typing + Blink
+  if (actions.introAnimation) { playExclusive('introAnimation'); } else startBase(0.3);
+  // pantallas: apagadas al cargar, fundido de encendido hasta 2.5
+  screens.forEach(s => { s.material = s.material.clone(); s.material.emissiveIntensity = 0; });
+  screensOnAt = performance.now() + 1500;   // el fundido se aplica en animate()
+  bars.forEach(b => { b.material = b.material.clone(); });
+  // vibe automático cada 20-40 s y al hacer clic sobre el personaje
+  const schedule = () => setTimeout(() => { vibe(); schedule(); }, 20000 + Math.random() * 20000); schedule();
+  document.querySelectorAll('button[data-clip]').forEach(b => { b.disabled = !actions[b.dataset.clip]; b.onclick = () => { const n = b.dataset.clip; if (n === 'browup') browup(); else playExclusive(n); }; });
+  const ray = new THREE.Raycaster(); let downAt = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return; // fue un arrastre de la cámara
+    ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+    if (character && ray.intersectObject(character, true).length) vibe();
+  });
+}, undefined, (err) => { console.error('avatar.glb: ' + (err.message || err)); });
+
+// ---- seguimiento de cursor en spine006: rotación mundial aplicada DESPUÉS del mixer (encima del clip) ----
+const LIM = Math.PI / 6;                       // ±30°
+const look = { yaw: 0, pitch: 0 };
+const qWorld = new THREE.Quaternion(), qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), eul = new THREE.Euler();
+const axisY = new THREE.Vector3(0, 1, 0), camRight = new THREE.Vector3();
+function applyHeadFollow() {
+  const active = !(exclusive === 'vibe' || exclusive === 'lookAround');
+  followWeight += ((active ? 1 : 0) - followWeight) * 0.08;
+  look.yaw += (mouse.x * LIM - look.yaw) * 0.08;
+  look.pitch += (mouse.y * LIM * 0.5 - look.pitch) * 0.08;
+  if (!head || followWeight < 0.001) return;
+  // Giro en espacio mundial: yaw alrededor de Y mundial, pitch alrededor del eje derecho de la cámara.
+  // El personaje mira a -Z; con r = derecha de la cámara, girar hacia la derecha de la pantalla es yaw*sign(-r.x)
+  // y mirar hacia arriba de la pantalla es pitch*sign(r.x)  (v' ≈ v + θ·(eje × v)).
+  camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  const s = camRight.x >= 0 ? 1 : -1;
+  qWorld.setFromAxisAngle(axisY, -s * look.yaw * followWeight);
+  qTmp.setFromAxisAngle(camRight, s * look.pitch * followWeight);
+  qWorld.multiply(qTmp);
+  head.parent.getWorldQuaternion(qParent);
+  // newLocal = parent^-1 * R * parent * local
+  qTmp.copy(qParent).invert().multiply(qWorld).multiply(qParent);
+  head.quaternion.premultiply(qTmp);
+}
+
+let frames = 0, fpsT = performance.now(), screensOnAt = Infinity, watchdog = 0, rafId = 0;
+// requestAnimationFrame con respaldo por temporizador: en Chrome headless (sin display link) rAF nunca dispara.
+function nextFrame() { rafId = requestAnimationFrame(animate); clearTimeout(watchdog); watchdog = setTimeout(() => { cancelAnimationFrame(rafId); animate(); }, 120); }
+function animate() {
+  clearTimeout(watchdog); nextFrame();
+  const dt = Math.min(clock.getDelta(), 0.1); const t = clock.elapsedTime;
+  undoFollow();
+  if (mixer) mixer.update(dt);
+  if (head) headClipQ.copy(head.quaternion);
+  applyHeadFollow();
+  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); }
+  bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; });
+  controls.update(); renderer.render(scene, camera);
+  frames++; status.frames++; status.exclusive = exclusive; status.screen = screens.length ? screens[0].material.emissiveIntensity : 0; const now = performance.now();
+  if (now - fpsT > 500) { status.fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
+    info.textContent = (status.loaded ? 'glb ok' : 'cargando glb…') + ' · hdr ' + (status.env ? 'ok' : '…') + ' · ' + status.fps + ' fps\nclips: ' + status.clips() + (exclusive ? '\nexclusivo: ' + exclusive : ''); }
+}
+animate();
+</script></body></html>
