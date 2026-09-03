@@ -41,12 +41,12 @@ Sebastián Escobar, desarrollador web de Medellín (Campo Valdés). Moda urbana,
 | 8 Párpados, cejas, candongas (render_face_grid.py, add_face_parts.py, checks/check_face_export.py) | ✅ completa (dea3b6f) | huesos eyelidL/R (+70° X = cerrado), eyebrow_L/R (+0.012 Z = levantada) con ejes locales = mundo; 8 mallas parentadas a hueso (exportan como hijas del hueso, verificado); 39 496 tris; renders face_parts_open/closed_browup/ear_L/ear_R.png. add_face_parts.py es idempotente y modifica character.blend en sitio (NO reejecutar import_character.py sin repetir luego apply_chest_logo.py y add_face_parts.py) |
 | 9 Animaciones (animate.py → character_anim.blend) | 🔄 subagente en curso | |
 | 11-13 Blender (ensamblaje, export, visor) | ⏳ | |
-| 10 Moto + ventana Medellín (Higgsfield) | 🔄 imágenes listas; malla 3D PARADA por créditos | generated/moto/dr150.png (ref foto subida con media_upload+curl+media_confirm), generated/window/medellin_a/b.png con marco pintado → recorte 16:9 sin marco de "a" = generated/window/medellin.png (build_scene.py reejecutado). Malla image_to_3d (8k tris, textura) = 30 créditos → superaría el límite de 100: pedir aprobación al usuario antes de lanzarla |
+| 10 Moto + ventana Medellín (Higgsfield) | ✅ completa | generated/moto/dr150.glb (v2a: cortavientos Acerbis, sin baúl; 7958 tris, 4 MB, textura a reducir a 1k en ensamblaje/export), previews moto_preview_0..2.png. Ventana: recorte 16:9 de medellin_a → generated/window/medellin.png, plano corregido (90°,0,180°) en build_scene.py |
 | 14 Cierre / README | ⏳ | |
 
 ## Créditos Higgsfield
 
-Saldo inicial 186. Balance real consultado antes de la Tarea 10: 94.8 (≈91 gastados; el log contaba 80). Tarea 10 gastó 4 más (ventana x2 + moto x1) → balance ≈90.8, ≈95 gastados. Log en `generated/credits.log`. Límite acordado: avisar antes de pasar de 100 → la malla de la moto (30) necesita el visto bueno del usuario.
+Saldo inicial 186. Balance real consultado antes de la Tarea 10: 94.8 (≈91 gastados; el log contaba 80). Tarea 10 gastó 38 (ventana x2 = 2, moto v1 = 2, moto v2 x2 = 4, malla Meshy = 30, autorizada por el usuario) → balance real 54.8 (consultado), ≈131 gastados. Log en `generated/credits.log`. El límite de 100 ya se superó con autorización; avisar antes de cualquier gasto nuevo.
 
 ## Archivos generados clave
 
@@ -59,6 +59,6 @@ Saldo inicial 186. Balance real consultado antes de la Tarea 10: 94.8 (≈91 gas
 
 - Aprobar el logo en el pecho (generated/renders/chest_logo.png) — versión clara por defecto; si prefiere la tinta oscura original: chest_logo_dark.png.
 - Aprobar la pose sentada (generated/renders/sit_v_final.png) y la cara (face_parts_open.png / face_parts_closed_browup.png).
-- Elegir vista de ventana (medellin_a recortada por defecto, o medellin_b) y AUTORIZAR los 30 créditos de la malla 3D de la moto (o aceptar una moto procedural/omitirla).
+- Vista de ventana: 'a' recortada (cambiar a 'b' si lo pide).
 - Opcional: dejar `refs/code/*.ts` para la pantalla de código (si no, código de ejemplo). Logo ya entregado.
 - Fotos definitivas de cara (opcional) para afinar el parecido al final (Tarea 14).
