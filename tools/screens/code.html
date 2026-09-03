@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  body{margin:0;width:1024px;height:576px;background:#0b0d12;color:#cdd6f4;font:22px/1.45 "SF Mono",Menlo,monospace;overflow:hidden}
+  .bar{height:34px;background:#141824;display:flex;align-items:center;padding:0 14px;gap:8px}
+  .dot{width:12px;height:12px;border-radius:50%}
+  pre{margin:18px 24px;white-space:pre}
+  .k{color:#89b4fa}.s{color:#a6e3a1}.f{color:#f9e2af}.c{color:#6c7086}.n{color:#fab387}
+</style>
+<div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+<span style="margin-left:12px;color:#8a90a8;font-size:16px">storefront/app/routes/products.$handle.tsx</span></div>
+<pre id="code"><span class="c">// Shopify Hydrogen + Supabase</span>
+<span class="k">export async function</span> <span class="f">loader</span>({ params, context }) {
+  <span class="k">const</span> { product } = <span class="k">await</span> context.storefront.<span class="f">query</span>(PRODUCT_QUERY, {
+    variables: { handle: params.handle },
+  });
+  <span class="k">const</span> { data: reviews } = <span class="k">await</span> supabase
+    .<span class="f">from</span>(<span class="s">'reviews'</span>)
+    .<span class="f">select</span>(<span class="s">'*'</span>)
+    .<span class="f">eq</span>(<span class="s">'product_id'</span>, product.id)
+    .<span class="f">limit</span>(<span class="n">10</span>);
+  <span class="k">return</span> { product, reviews };
+}
+
+<span class="k">export default function</span> <span class="f">Product</span>() {
+  <span class="k">const</span> { product, reviews } = <span class="f">useLoaderData</span>();
+  <span class="k">return</span> (
+    &lt;<span class="n">ProductLayout</span> title={product.title}&gt;
+      &lt;<span class="n">Reviews</span> items={reviews} /&gt;
+    &lt;/<span class="n">ProductLayout</span>&gt;
+  );
+}</pre>

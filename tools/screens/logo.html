@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  body{margin:0;width:1024px;height:576px;background:radial-gradient(circle at 50% 45%,#141a2a 0,#07080c 70%);display:flex;align-items:center;justify-content:center;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#fff}
+  .box{text-align:center}
+  .ini{font-size:220px;font-weight:800;letter-spacing:-12px;line-height:1;background:linear-gradient(90deg,#ffffff,#3b82f6);-webkit-background-clip:text;color:transparent}
+  .sub{margin-top:10px;font-size:34px;letter-spacing:10px;color:#9aa4bf}
+  img{max-height:360px}
+</style>
+<div class="box" id="box"><div class="ini">SE</div><div class="sub">WEB DEVELOPER · MEDELLÍN</div></div>
+<script>
+  // Si existe ../../refs/logo.png (copiado a logo.png junto a este archivo por make_screens.sh) se usa.
+  const img = new Image(); img.onload = () => { document.getElementById('box').innerHTML = ''; document.getElementById('box').appendChild(img); };
+  img.src = 'logo.png';
+</script>
