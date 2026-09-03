@@ -3,6 +3,10 @@ set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/generated/screens"; mkdir -p "$OUT"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+if [ ! -x "$CHROME" ]; then
+  echo "Error: Google Chrome no encontrado en $CHROME" >&2
+  exit 1
+fi
 [ -f "$ROOT/refs/logo.png" ] && cp "$ROOT/refs/logo.png" "$ROOT/tools/screens/logo.png"
 for n in code logo stack; do
   "$CHROME" --headless=new --disable-gpu --hide-scrollbars --window-size=1024,576 \
