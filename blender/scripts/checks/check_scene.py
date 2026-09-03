@@ -5,7 +5,7 @@ import bpy, common
 need = ['desk', 'chair_seat', 'laptop_base', 'screen_laptop', 'monitor_L', 'monitor_C', 'monitor_R',
         'screen_left', 'screen_center', 'screen_right', 'rgb_bar_L', 'rgb_bar_R', 'shelf',
         'shelf_bracket_0', 'shelf_bracket_1', 'shelf_arm_0', 'shelf_arm_1', 'mug',
-        'controller', 'window_far', 'window_near', 'window_post_L', 'window_post_R',
+        'controller', 'window_far', 'window_near', 'window_head', 'window_post_L', 'window_post_R',
         'wall_back_L', 'wall_back_R', 'wall_back_top', 'wall_back_bottom', 'wall_left', 'wall_right',
         'ceiling', 'floor', 'seat_anchor', 'moto_anchor']
 missing = [n for n in need if n not in bpy.data.objects]

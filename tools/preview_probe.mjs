@@ -30,6 +30,10 @@ const send = (method, params = {}) => new Promise((r) => { const i = ++id; pendi
 ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pending[d.id]) { pending[d.id](d); delete pending[d.id]; } };
 await new Promise((r) => (ws.onopen = r));
 await send('Page.enable'); await send('Runtime.enable');
+// El perfil de Chrome (--user-data-dir) sobrevive entre corridas: sin esto el navegador reusa
+// avatar.glb / preview.html del cache HTTP y la sonda mide un modelo VIEJO (sintoma tipico:
+// hpQ null porque el GLB cacheado no tiene el hueso 'headphones').
+await send('Network.enable'); await send('Network.setCacheDisabled', { cacheDisabled: true });
 await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/preview.html` });
 const ev = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true }); return r.result?.result?.value; };
 const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(join(OUT, name), Buffer.from(r.result.data, 'base64')); console.log('PROBE shot', name); };

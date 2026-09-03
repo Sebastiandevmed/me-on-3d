@@ -1,6 +1,6 @@
 # blender/scripts/assemble.py
 # Ensamblaje final: abre scene.blend, appendea el personaje animado (character_anim.blend,
-# Armature + Body + partes de la cara emparentadas a huesos), lo sienta sobre 'seat_anchor',
+# Armature + Body + partes de la cara y audifonos emparentadas a huesos), lo sienta sobre 'seat_anchor',
 # importa la mini moto (generated/moto/dr150.glb) escalada a MOTO_LENGTH de largo sobre
 # 'moto_anchor', pone el HDR nocturno como mundo, y renderiza el render de aprobacion
 # generated/renders/assembled_v1.png con la camara de aprobacion de scene.blend.
@@ -22,7 +22,9 @@ bpy.ops.wm.open_mainfile(filepath=os.path.join(common.BLEND_DIR, 'scene.blend'))
 sc = bpy.context.scene
 
 # ------------------------------------------------------------------ personaje animado
-# Se traen TODOS los objetos (Armature, Body y las 8 partes de la cara emparentadas a huesos);
+# Se traen TODOS los objetos (Armature, Body, las partes de la cara y las 3 mallas de
+# audifonos -headphones_band/cup_L/cup_R- emparentadas a huesos); character_checks() las
+# incluye todas en la prueba de intersecciones porque 'bodies' son todas las mallas.
 # el emparentamiento se conserva porque se cargan juntos.
 with bpy.data.libraries.load(os.path.join(common.BLEND_DIR, 'character_anim.blend')) as (src, dst):
     dst.objects = [n for n in src.objects]

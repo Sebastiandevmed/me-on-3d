@@ -59,6 +59,8 @@ SPINE_BONES = {'spine', 'spine001', 'spine002', 'spine003', 'spine004', 'spine00
 EYELIDS = {'eyelidL', 'eyelidR'}
 OTHER_TEX = 1024
 TEX_LIMITS = {'medellin': 2048}      # la ventana se ve enorme en pantalla: no reescalar (1504x846)
+# la clave es el NOMBRE SIN EXTENSION: el datablock de Blender se llama 'medellin.png' pero el
+# glTF exporta la imagen como 'medellin' (que es lo que comprueba el check de mas abajo).
 CHAR_QUALITY = 92                    # el atlas del personaje tiene miles de bordes: JPEG alto
 # escalera de calidad (formato de imagen, calidad JPEG del resto, lado maximo de la textura del personaje)
 LADDER = [
@@ -177,7 +179,7 @@ for m in bpy.data.materials:
 def limit_textures(char_limit):
     for img in bpy.data.images:
         if img.size[0] == 0: continue
-        limit = char_limit if img in char_imgs else TEX_LIMITS.get(img.name, OTHER_TEX)
+        limit = char_limit if img in char_imgs else TEX_LIMITS.get(os.path.splitext(img.name)[0], OTHER_TEX)
         w, h = img.size
         if w > limit:
             img.scale(limit, max(1, int(h * limit / w)))

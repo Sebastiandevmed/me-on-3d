@@ -49,7 +49,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = false; document.body.appendChild(renderer.domElement);
+document.body.appendChild(renderer.domElement);   // shadowMap se enciende con el bloque de luces
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060a);
 
 // Cámara de aprobación: Blender (-1.3, 3.7, 1.95) mirando a (0, 0.6, 1.0)  ->  glTF Y-up (x, z, -y).
@@ -172,7 +172,7 @@ const undoFollow = () => { for (const k in follow) if (follow[k] && saved[k]) fo
 const saveFollow = () => { for (const k in follow) if (follow[k]) saved[k] = (saved[k] || new THREE.Quaternion()).copy(follow[k].quaternion); };
 const ray = new THREE.Raycaster();
 const vHead = new THREE.Vector3(), vTarget = new THREE.Vector3(), vDir = new THREE.Vector3(), vCam = new THREE.Vector3();
-const qWorld = new THREE.Quaternion(), qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), qW = new THREE.Quaternion(), qHeadOld = new THREE.Quaternion(), qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion();
+const qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), qW = new THREE.Quaternion(), qHeadOld = new THREE.Quaternion(), qPitch = new THREE.Quaternion();
 const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0);
 function worldRotate(obj, q, weight) {   // newLocal = parent^-1 * slerp(I, q, w) * parent * local
   obj.parent.getWorldQuaternion(qParent);
@@ -197,8 +197,7 @@ function applyHeadFollow() {
     look.pitch += (Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch)) - look.pitch) * 0.08;
   }
   if (followWeight < 0.001) return;
-  qYaw.setFromAxisAngle(AX_Y, look.yaw); qPitch.setFromAxisAngle(AX_X, look.pitch);
-  qWorld.copy(qYaw).multiply(qPitch);
+  qPitch.setFromAxisAngle(AX_X, look.pitch);
   if (follow.chest) { qTmp.setFromAxisAngle(AX_Y, look.yaw * 0.3); worldRotate(follow.chest, qTmp, followWeight); }
   // el pecho ya giro: la cabeza aplica el resto (el giro de mundo se compone igual, la cabeza es hija)
   qHeadOld.copy(follow.head.quaternion);

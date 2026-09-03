@@ -168,8 +168,13 @@ def main():
     bsdf.inputs['Emission Strength'].default_value = 0.0
     bsdf.inputs['Emission Color'].default_value = (0, 0, 0, 1)
     bsdf.inputs['Specular IOR Level'].default_value = 0.5
+    # Meshy deja 'Specular Tint' en (2,2,2): el exportador glTF lo emite como
+    # KHR_materials_specular.specularColorFactor [2,2,2] y el hoodie negro brilla como plastico.
+    # Blanco (1,1,1) es el valor por defecto, asi que la extension desaparece del GLB
+    # (lo verifica export_glb.py: 'Character sin KHR_materials_specular').
+    bsdf.inputs['Specular Tint'].default_value = (1.0, 1.0, 1.0, 1.0)
     body['texture_clean'] = True
-    print('MATERIAL Character metallic 0 roughness', ROUGHNESS, 'emission 0')
+    print('MATERIAL Character metallic 0 roughness', ROUGHNESS, 'emission 0 specular_tint 1')
 
     # --- 6. render de aprobacion (misma camara que apply_chest_logo: torso de frente)
     for o in list(bpy.data.objects):
