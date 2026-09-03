@@ -132,7 +132,10 @@ def render(path, res=(1280, 720), samples=32):
     bpy.ops.render.render(write_still=True)
     print('RENDER', path)
 
-def export_glb(path, draco=True, animations=True):
+def export_glb(path, draco=True, animations=True, **extra):
+    """Exporta la escena a GLB. `extra` son opciones adicionales de bpy.ops.export_scene.gltf
+    (pisan las de abajo). Las opciones que no existan en el RNA de este Blender se descartan
+    y se imprimen (EXPORT_DROPPED) para que nunca pasen desapercibidas."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     kwargs = dict(
         filepath=path, export_format='GLB', export_yup=True, export_apply=True,
@@ -142,7 +145,11 @@ def export_glb(path, draco=True, animations=True):
         export_optimize_animation_size=True,
         export_draco_mesh_compression_enable=draco, export_draco_mesh_compression_level=6,
     )
+    kwargs.update(extra)
     valid = {p.identifier for p in bpy.ops.export_scene.gltf.get_rna_type().properties}
+    dropped = sorted(k for k in kwargs if k not in valid)
+    if dropped:
+        print('EXPORT_DROPPED kwargs sin soporte en este Blender:', dropped)
     kwargs = {k: v for k, v in kwargs.items() if k in valid}
     bpy.ops.export_scene.gltf(**kwargs)
     print('EXPORT', path, os.path.getsize(path))
