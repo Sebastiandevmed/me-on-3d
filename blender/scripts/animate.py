@@ -177,17 +177,20 @@ poses.apply(arm, SIT)
 
 
 # --------------------------------------------------------------------------- 1) typing
-# 48 frames en bucle. Sin dedos: alterna el golpe de muneca de cada mano (~6 grados) y
+# 48 frames en bucle. Sin dedos: alterna el levante de muneca de cada mano (~8 grados) y
 # acompana con un levante minimo de antebrazo. Ni columna ni cabeza.
+# La oscilacion es ASIMETRICA: `up` va de 0 (pose SIT, palma sobre el laptop) a 1 (mano
+# arriba). Con +-amp simetrico la carrera hacia abajo metia las yemas ~3.4 cm en el
+# escritorio (hallazgo de la tarea 11: 319 vertices dentro del tablero en f12).
 act = new_action('typing', ARM_BONES)
 for f in range(1, 50, 4):                       # 1..49; el 49 repite el 1 (bucle limpio)
     t = (f - 1) / 48.0 * 2 * math.pi
     ph = {'L': t, 'R': t + math.pi}
-    bob = lambda s: math.sin(ph[s])
+    up = lambda s: 0.5 * (1.0 + math.sin(ph[s]))        # 0..1, L y R a contratiempo
     key_pose(f, solve_arms(
-        upper=lambda s: (-SX[s] * 0.06, 0.0 + 0.012 * bob(s), -0.998),
-        fore=lambda s: (SX[s] * 0.13, 0.99, 0.02 + 0.050 * bob(s)),
-        hand=lambda s: (SX[s] * (0.05 + 0.030 * math.sin(ph[s] * 2)), 0.995, 0.15 * bob(s)),
+        upper=lambda s: (-SX[s] * 0.06, 0.0 + 0.024 * up(s), -0.998),
+        fore=lambda s: (SX[s] * 0.13, 0.99, 0.02 + 0.10 * up(s)),
+        hand=lambda s: (SX[s] * (0.05 + 0.030 * math.sin(ph[s] * 2)), 0.995, 0.30 * up(s)),
     ))
 finish(act, 48, cyclic=True)
 
