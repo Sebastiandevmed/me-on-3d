@@ -13,7 +13,7 @@
 import sys, os, math, json, struct
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'tools'))
-import bpy, common
+import bpy, common, poses
 import glb_inspect
 from mathutils import Matrix, Quaternion, Vector
 
@@ -27,6 +27,10 @@ EXPECTED = {
     'earring_L2': 'spine006',
     'earring_R1': 'spine006',
     'earring_R2': 'spine006',
+    # Task 4: la pieza de audifonos cuelga de su propio hueso
+    'headphones_band': 'headphones',
+    'headphones_cup_L': 'headphones',
+    'headphones_cup_R': 'headphones',
 }
 
 
@@ -81,6 +85,12 @@ def main():
         pb.rotation_mode = 'XYZ'
         pb.rotation_euler = (math.radians(70.0), 0.0, 0.0)
         arm.pose.bones[f'eyebrow_{s}'].location = (0.0, 0.0, 0.012)
+    hp_on = poses.headphones_on()
+    if hp_on is None:
+        common.fail('falta blender/headphones.json (lo escribe add_headphones.py)')
+    hp = arm.pose.bones['headphones']
+    hp.rotation_mode = 'XYZ'
+    hp.rotation_euler, hp.location = hp_on
     bpy.context.view_layer.update()
     posed_w = {n: bpy.data.objects[n].matrix_world.copy() for n in EXPECTED}
 
@@ -90,6 +100,7 @@ def main():
     for s in 'LR':
         arm.pose.bones[f'eyelid{s}'].rotation_euler = (0.0, 0.0, 0.0)
         arm.pose.bones[f'eyebrow_{s}'].location = (0.0, 0.0, 0.0)
+    hp.rotation_euler, hp.location = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
 
     info = glb_inspect.inspect(path)
     print('GLB_INFO tris=', info['triangles'], 'nodos=', len(info['nodes']),
@@ -152,7 +163,7 @@ def main():
             print(f'EXPORT_FAIL {mesh_name}: cuelga de {pname!r}, se esperaba {bone_name!r}')
             ok = False
 
-    for bn in ('eyelidL', 'eyelidR', 'eyebrow_L', 'eyebrow_R', 'spine006'):
+    for bn in ('eyelidL', 'eyelidR', 'eyebrow_L', 'eyebrow_R', 'spine006', 'headphones'):
         if bn not in by_name:
             print('EXPORT_FAIL falta el nodo de hueso', bn)
             ok = False

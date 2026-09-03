@@ -135,7 +135,8 @@ for f in ('thumb', 'f_index', 'f_middle', 'f_ring', 'f_pinky'):
             SIT[f'{f}0{i}{s}'] = finger_rot(18 if f != 'thumb' else 8)
 
 
-def apply(arm, pose, frame=None):
+def apply(arm, pose, frame=None, loc=None):
+    """Asigna eulers (y opcionalmente traslaciones locales `loc={hueso: (x,y,z)}`); keyframea si `frame`."""
     for pb in arm.pose.bones:
         pb.rotation_mode = 'XYZ'
     for name, e in pose.items():
@@ -144,3 +145,26 @@ def apply(arm, pose, frame=None):
         pb.rotation_euler = e
         if frame is not None:
             pb.keyframe_insert('rotation_euler', frame=frame)
+    for name, l in (loc or {}).items():
+        pb = arm.pose.bones.get(name)
+        if not pb: continue
+        pb.location = l
+        if frame is not None:
+            pb.keyframe_insert('location', frame=frame)
+
+
+# --- audifonos (hueso 'headphones', hijo de spine006; reposo = colgando del cuello).
+# Estado "puestos": lo escribe add_headphones.py en blender/headphones.json (rotacion en grados
+# y traslacion en espacio local del hueso). Se carga perezosamente para que poses.py siga
+# importable antes de que exista el archivo.
+import json as _json, os as _os
+_HP_JSON = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'headphones.json')
+
+
+def headphones_on():
+    """(euler_rad, location_local) del estado 'puestos'; None si aun no existe headphones.json."""
+    if not _os.path.exists(_HP_JSON):
+        return None
+    with open(_HP_JSON) as f:
+        d = _json.load(f)['on_head']
+    return (tuple(math.radians(v) for v in d['rotation_deg']), tuple(d['location']))

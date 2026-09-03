@@ -34,7 +34,9 @@ $B - blender/scripts/import_character.py                         # blender/chara
 $B blender/character.blend blender/scripts/apply_chest_logo.py   # logo en el pecho (textura)
 $B blender/character.blend blender/scripts/render_face_grid.py   # rejilla de verificación; blender/landmarks.json ya está calibrado
 $B blender/character.blend blender/scripts/add_face_parts.py     # párpados, cejas y candongas con huesos (lee blender/landmarks.json)
-$B blender/character.blend blender/scripts/checks/check_rig.py   # después de add_face_parts: exige los huesos faciales
+$B blender/character.blend blender/scripts/hide_neck_headphones.py  # esconde los audífonos fundidos en el cuello (--probe para calibrar)
+$B blender/character.blend blender/scripts/add_headphones.py     # audífonos como pieza aparte + hueso 'headphones' (escribe blender/headphones.json)
+$B blender/character.blend blender/scripts/checks/check_rig.py   # después de add_face_parts y add_headphones: exige sus huesos y objetos
 $B blender/character.blend blender/scripts/checks/check_face_export.py
 $B blender/character.blend blender/scripts/animate.py            # blender/character_anim.blend (7 clips)
 $B blender/character_anim.blend blender/scripts/checks/check_anim.py
@@ -44,7 +46,9 @@ $B blender/avatar.blend blender/scripts/export_glb.py            # export/avatar
 python3 tools/glb_inspect.py export/avatar.glb
 ```
 
-Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py` y `add_face_parts.py`. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`). `add_face_parts.py` también (borra lo que creó antes). `check_rig.py` va después de `add_face_parts.py` porque exige los huesos y objetos faciales.
+Orden importante: `import_character.py` reconstruye `character.blend` desde cero, así que después hay que repetir `apply_chest_logo.py`, `add_face_parts.py`, `hide_neck_headphones.py` y `add_headphones.py`. `apply_chest_logo.py` es idempotente (parte siempre de `generated/character_texture_original.png`). `add_face_parts.py` y `add_headphones.py` también (borran lo que crearon antes); `hide_neck_headphones.py` se marca con la propiedad `Body['neck_headphones_hidden']` y no se aplica dos veces. `check_rig.py` y `check_face_export.py` van después porque exigen los huesos y objetos faciales y los de los audífonos.
+
+Audífonos: los que trae la malla de Meshy están fundidos alrededor del cuello, así que `hide_neck_headphones.py` los encoge hacia el eje del cuello (quedan escondidos dentro de la piel) y `add_headphones.py` modela una pieza aparte (`headphones_band`, `headphones_cup_L/R`) movida por el hueso `headphones`, hijo de `spine006`. Reposo = colgando del cuello; "puestos" = la rotación y la traslación que `add_headphones.py` escribe en `blender/headphones.json` (versionado) y que `poses.headphones_on()` lee. La región que se encoge se calibra con `hide_neck_headphones.py -- --probe`, que pinta la selección y renderiza `generated/renders/headphones_probe_*.png` sin guardar.
 
 Landmarks de la cara: `blender/landmarks.json` está versionado y calibrado a mano (posición de ojos, cejas y lóbulos, tono de piel). `render_face_grid.py` solo escribe una versión automática (con las orejas en `[0,0,0]`) si el archivo no existe, y sirve para producir los renders con rejilla (`generated/renders/face_grid_*.png`) con los que se calibra. `add_face_parts.py` falla si falta una clave o si las orejas siguen en `[0,0,0]`.
 
