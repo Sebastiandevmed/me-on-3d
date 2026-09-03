@@ -17,6 +17,7 @@ m_white = mat('White', (0.85, 0.85, 0.85, 1), roughness=0.4)
 m_alu = mat('Aluminium', (0.6, 0.6, 0.62, 1), roughness=0.35, metallic=0.9)
 m_rgb = mat('RGB_Bar', (0.1, 0.1, 0.1, 1), emission=(0.25, 0.55, 1.0, 1), emission_strength=6.0)
 m_floor = mat('Floor', (0.015, 0.015, 0.017, 1), roughness=0.8)
+m_wall = mat('Wall', (0.10, 0.11, 0.14, 1), roughness=0.92)
 def screen_mat(name, png):
     p = os.path.join(SCREENS, png)
     if os.path.exists(p):
@@ -74,9 +75,28 @@ for tag, x, w, h, sname, mname, png, yaw in MON:
 for tag, x in (('L', -1.05), ('R', 1.05)):
     cylinder(f'rgb_bar_{tag}', 0.018, 0.9, (x, -1.3, DESK_Z + 0.5), material=m_rgb, verts=12, collection=col)
 
-# --- repisa flotante con anchor para la moto (atras-izquierda, visible detras del personaje)
-box('shelf', (0.5, 0.22, 0.03), (-1.25, -0.6, DESK_Z + 0.75), m_dark, col)
-bpy.ops.object.empty_add(location=(-1.25, -0.6, DESK_Z + 0.765)); bpy.context.active_object.name = 'moto_anchor'
+# --- habitacion: paredes y techo (antes no existian y el visor quedaba negro)
+ROOM_X, ROOM_Y_BACK, ROOM_H = 2.8, -1.7, 2.8          # medias anchuras / pared trasera / altura
+WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = -1.9, 1.3, 0.6, 2.4  # hueco de la ventana (3.2 x 1.8 = 16:9)
+WALL_T = 0.10
+yb = ROOM_Y_BACK - WALL_T / 2                          # centro de las cajas de la pared trasera
+box('wall_back_L', (WIN_X0 + ROOM_X, WALL_T, ROOM_H), ((WIN_X0 - ROOM_X) / 2, yb, ROOM_H / 2), m_wall, col)
+box('wall_back_R', (ROOM_X - WIN_X1, WALL_T, ROOM_H), ((WIN_X1 + ROOM_X) / 2, yb, ROOM_H / 2), m_wall, col)
+box('wall_back_top', (WIN_X1 - WIN_X0, WALL_T, ROOM_H - WIN_Z1), ((WIN_X0 + WIN_X1) / 2, yb, (WIN_Z1 + ROOM_H) / 2), m_wall, col)
+box('wall_back_bottom', (WIN_X1 - WIN_X0, WALL_T, WIN_Z0), ((WIN_X0 + WIN_X1) / 2, yb, WIN_Z0 / 2), m_wall, col)
+box('wall_left', (WALL_T, 8.0, ROOM_H), (-ROOM_X - WALL_T / 2, 1.0, ROOM_H / 2), m_wall, col)
+box('wall_right', (WALL_T, 8.0, ROOM_H), (ROOM_X + WALL_T / 2, 1.0, ROOM_H / 2), m_wall, col)
+box('ceiling', (2 * ROOM_X + 2 * WALL_T, 8.0, WALL_T), (0, 1.0, ROOM_H + WALL_T / 2), m_wall, col)
+
+# --- repisa con soportes en L sobre la pared trasera derecha (+X = izquierda de la camara)
+SHELF_X, SHELF_Z = 2.0, DESK_Z + 0.71
+SHELF_D = 0.24
+shelf_y = ROOM_Y_BACK + SHELF_D / 2                     # pegada a la cara interior de la pared
+box('shelf', (0.55, SHELF_D, 0.03), (SHELF_X, shelf_y, SHELF_Z), m_dark, col)
+for i, dx in enumerate((-0.18, 0.18)):
+    box(f'shelf_bracket_{i}', (0.025, 0.025, 0.16), (SHELF_X + dx, ROOM_Y_BACK + 0.0125, SHELF_Z - 0.095), m_alu, col)
+    box(f'shelf_arm_{i}', (0.025, SHELF_D - 0.02, 0.025), (SHELF_X + dx, shelf_y - 0.01, SHELF_Z - 0.0275), m_alu, col)
+bpy.ops.object.empty_add(location=(SHELF_X, shelf_y, SHELF_Z + 0.015)); bpy.context.active_object.name = 'moto_anchor'
 
 # --- taza y control
 cylinder('mug', 0.045, 0.1, (0.45, 0.95, DESK_Z + 0.07), material=m_black, verts=20, collection=col)
@@ -98,11 +118,14 @@ else:
                 emission=(0.02, 0.05, 0.12, 1), emission_strength=0.4)
 # rotación (90°,0,180°): normal hacia +Y (la habitación) y el eje V de la textura hacia +Z.
 # Con (-90,0,0) la normal también mira a +Y pero la imagen queda cabeza abajo.
-plane('window_far', (4.0, 2.25), (0, -1.6, 1.55), rotation=(math.radians(90), 0, math.radians(180)), material=m_far, collection=col)
+wcx, wcz = (WIN_X0 + WIN_X1) / 2, (WIN_Z0 + WIN_Z1) / 2
+plane('window_far', (WIN_X1 - WIN_X0, WIN_Z1 - WIN_Z0), (wcx, ROOM_Y_BACK - 0.02, wcz),
+      rotation=(math.radians(90), 0, math.radians(180)), material=m_far, collection=col)
 m_frame = mat('Window_Frame', (0.03, 0.03, 0.035, 1), roughness=0.6)
-box('window_near', (4.2, 0.06, 0.25), (0, -1.4, 0.42), m_frame, col)          # antepecho
-for x in (-2.1, 2.1):
-    box(f'window_post_{int(x)}', (0.08, 0.06, 2.4), (x, -1.4, 1.5), m_frame, col)
+box('window_near', (WIN_X1 - WIN_X0 + 0.16, 0.08, 0.06), (wcx, ROOM_Y_BACK + 0.04, WIN_Z0 - 0.03), m_frame, col)   # antepecho
+for tag, x in (('L', WIN_X0 - 0.04), ('R', WIN_X1 + 0.04)):
+    box(f'window_post_{tag}', (0.08, 0.08, WIN_Z1 - WIN_Z0 + 0.12), (x, ROOM_Y_BACK + 0.04, wcz), m_frame, col)
+box('window_head', (WIN_X1 - WIN_X0 + 0.16, 0.08, 0.06), (wcx, ROOM_Y_BACK + 0.04, WIN_Z1 + 0.03), m_frame, col)
 
 # --- camara y luces para renders de aprobacion
 # Ruling del controlador: la camara debe quedar ENFRENTE del personaje, cruzando

@@ -13,7 +13,7 @@ from mathutils import Vector
 # Helpers de la prueba de sentado (Task 7): sit_test.py tiene guard __main__, importarlo no corre la prueba.
 from sit_test import seat_on_anchor, world_verts, inside, BOXES
 
-MOTO_LENGTH = 0.25          # largo de la moto de juguete (m)
+MOTO_LENGTH = 0.32          # largo de la moto de juguete (m)
 MOTO_YAW_DEG = -30.0        # giro en Z para que se lea desde la camara de aprobacion
 MOTO_TEX = 1024             # texturas 1k para todo menos el personaje
 common.ensure_dirs()
