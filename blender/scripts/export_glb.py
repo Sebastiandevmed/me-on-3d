@@ -58,7 +58,9 @@ POSE_TOL = 0.9948                         # |dot| de cuaterniones: ~5.8 grados
 SPINE_BONES = {'spine', 'spine001', 'spine002', 'spine003', 'spine004', 'spine005', 'spine006'}
 EYELIDS = {'eyelidL', 'eyelidR'}
 OTHER_TEX = 1024
-# escalera de calidad (formato de imagen, calidad JPEG, lado maximo de la textura del personaje)
+TEX_LIMITS = {'medellin': 2048}      # la ventana se ve enorme en pantalla: no reescalar (1504x846)
+CHAR_QUALITY = 92                    # el atlas del personaje tiene miles de bordes: JPEG alto
+# escalera de calidad (formato de imagen, calidad JPEG del resto, lado maximo de la textura del personaje)
 LADDER = [
     dict(fmt='AUTO', quality=85, char=2048),
     dict(fmt='JPEG', quality=85, char=2048),
@@ -175,7 +177,7 @@ for m in bpy.data.materials:
 def limit_textures(char_limit):
     for img in bpy.data.images:
         if img.size[0] == 0: continue
-        limit = char_limit if img in char_imgs else OTHER_TEX
+        limit = char_limit if img in char_imgs else TEX_LIMITS.get(img.name, OTHER_TEX)
         w, h = img.size
         if w > limit:
             img.scale(limit, max(1, int(h * limit / w)))
@@ -197,10 +199,14 @@ if drift > 1e-4: common.fail('la pose base antes de exportar ya no es SIT')
 
 # ------------------------------------------------------------------ 5. exportar (escalera)
 def do_export(path, draco, step):
+    # el exportador glTF no admite calidad JPEG por imagen: en el primer intento (formato AUTO,
+    # todo cabe suelto) se sube la calidad del archivo entero a CHAR_QUALITY para no perder
+    # nitidez en el atlas del personaje; si no cabe en el presupuesto, la escalera baja como antes.
+    quality = max(step['quality'], CHAR_QUALITY) if step is LADDER[0] else step['quality']
     common.export_glb(path, draco=draco, animations=True,
                       export_image_format=step['fmt'],
-                      export_jpeg_quality=step['quality'],     # Blender >= 4.2
-                      export_image_quality=step['quality'],    # Blender < 4.2 (JPEG) / WebP
+                      export_jpeg_quality=quality,     # Blender >= 4.2
+                      export_image_quality=quality,    # Blender < 4.2 (JPEG) / WebP
                       export_rest_position_armature=False,
                       export_reset_pose_bones=False,
                       export_optimize_animation_keep_anim_armature=False,
@@ -250,6 +256,15 @@ for m in SCREENS:
     check('emissiveTexture' in mm, f'{m} emissiveTexture={mm.get("emissiveTexture")} '
           f'factor={mm.get("emissiveFactor")} alphaMode={mm.get("alphaMode", "OPAQUE")}')
 print('EXPORT alphaMode', {k: v.get('alphaMode', 'OPAQUE') for k, v in mats.items()})
+
+ch = mats.get('Character', {})
+pbr = ch.get('pbrMetallicRoughness', {})
+check(pbr.get('metallicFactor', 1.0) == 0, f"Character metallicFactor={pbr.get('metallicFactor', 'ausente=1.0')}")
+check(0.7 <= pbr.get('roughnessFactor', 1.0) <= 0.95, f"Character roughnessFactor={pbr.get('roughnessFactor', 'ausente=1.0')}")
+check('emissiveTexture' not in ch, 'Character sin emissiveTexture')
+check('KHR_materials_specular' not in ch.get('extensions', {}), 'Character sin KHR_materials_specular')
+win = next((w for n, _, w, h, _ in imgs if n == 'medellin'), None)
+check(win == 1504, f'medellin exportada a {win} de ancho (esperado 1504, sin reescalar)')
 
 by_name = {}
 for i, n in enumerate(g.get('nodes', [])):
