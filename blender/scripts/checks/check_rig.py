@@ -30,7 +30,11 @@ for bn in ('eyelidL', 'eyelidR', 'eyebrow_L', 'eyebrow_R'):
 
 meshes = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('Body')]
 if not meshes: common.fail('no hay malla Body')
-tris = sum(common.tri_count(m) for m in meshes)
+# presupuesto de triangulos: TODAS las mallas del .blend son el personaje (cuerpo +
+# parpados + cejas + candongas), asi que se suman todas, no solo Body*.
+all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+tris = sum(common.tri_count(m) for m in all_meshes)
+body_tris = sum(common.tri_count(m) for m in meshes)
 if tris > 40000: common.fail(f'personaje demasiado pesado: {tris}')
 zs = [(m.matrix_world @ Vector(v.co)).z for m in meshes for v in m.data.vertices]
 h = max(zs) - min(zs)
@@ -43,4 +47,5 @@ if hf.y <= s6.y: common.fail(f'el personaje no mira a +Y: headfront.y={hf.y:.3f}
 for m in meshes:
     vg = {g.name for g in m.vertex_groups}
     if 'spine006' not in vg: common.fail(f'{m.name} sin pesos en spine006')
-print('CHECK_RIG OK tris=', tris, 'h=', round(h, 3))
+print('CHECK_RIG OK tris=', tris, '(Body', body_tris, '+ partes faciales',
+      tris - body_tris, ') mallas=', len(all_meshes), 'h=', round(h, 3))

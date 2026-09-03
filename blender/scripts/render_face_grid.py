@@ -161,7 +161,12 @@ def analyse_texture(arm, obj, hz):
     print('SKIN_RGB_sRGB', [round(float(c), 4) for c in skin], 'n=', int(skin_sel.sum()))
     for q in (25, 50, 75):
         print('  skin p%d' % q, [round(float(c), 4) for c in np.percentile(col[skin_sel], q, axis=0)])
-    return blobs, [float(c) for c in skin]
+
+    # tono de la ceja pintada: mediana de los texeles oscuros de la banda de las cejas
+    brow_sel = (dark & (wz > hz + 0.085) & (wz < hz + 0.118) & (ax_ > 0.015) & (ax_ < 0.080))
+    brow = np.median(col[brow_sel], axis=0) if brow_sel.sum() >= 50 else np.array([0.05, 0.04, 0.035])
+    print('BROW_RGB_sRGB', [round(float(c), 4) for c in brow], 'n=', int(brow_sel.sum()))
+    return blobs, [float(c) for c in skin], [float(c) for c in brow]
 
 
 def guess_landmarks(blobs, hz):
@@ -217,7 +222,7 @@ def main():
 
     res = analyse_texture(arm, obj, hz)
     if res:
-        blobs, skin = res
+        blobs, skin, brow = res
         pairs = guess_landmarks(blobs, hz)
         if len(pairs) >= 2:
             (eL, eR), (bL, bR) = pairs[0], pairs[1]
@@ -228,7 +233,8 @@ def main():
                 'brow_L': [round(bL['x'], 4), round(bL['y'], 4), round(bL['z'], 4)],
                 'brow_R': [round(bR['x'], 4), round(bR['y'], 4), round(bR['z'], 4)],
                 'ear_L': [0, 0, 0], 'ear_R': [0, 0, 0],
-                'skin': [round(c, 4) for c in skin],
+                'skin_srgb': [round(c, 4) for c in skin],
+                'brow_srgb': [round(c, 4) for c in brow],
             }
             path = os.path.join(common.GEN, 'landmarks.json')
             if not os.path.exists(path):

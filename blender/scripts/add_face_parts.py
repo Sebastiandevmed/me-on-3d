@@ -37,10 +37,10 @@ LID_OFFSET = 0.0015     # m que el párpado sobresale de la piel al estar cerrad
 LID_THICK = 0.0015      # m de grosor del párpado (solidify)
 LID_PIVOT_BACK = 0.006  # m hacia dentro de la cara donde queda el pivote
 LID_PIVOT_UP = 0.016    # m por encima del centro del ojo donde queda el pivote
-BROW_OFFSET = 0.0004    # m que la ceja sobresale de la piel
-BROW_THICK = 0.0050     # m de bulto de la ceja (perfil eliptico, se afila en las puntas)
+BROW_OFFSET = 0.0003    # m que la ceja sobresale de la piel (apenas apoyada)
+BROW_THICK = 0.0030     # m de bulto de la ceja (perfil eliptico, se afila en las puntas)
 BROW_ARCH = 0.0015      # m de arco de la ceja
-BROW_SEGS = 9           # secciones a lo largo de la ceja
+BROW_SEGS = 11          # secciones a lo largo de la ceja
 BROW_PROF = 8           # vertices del perfil eliptico
 BONE_LEN = 0.015
 HOOP_MINOR = 0.0016
@@ -286,7 +286,9 @@ def main():
     skin = [srgb_to_linear(c) for c in lm.get('skin_srgb', [0.93, 0.63, 0.54])]
     print('SKIN_LINEAR', [round(c, 4) for c in skin])
     m_skin = common.mat('Eyelid', tuple(skin) + (1.0,), roughness=0.72)
-    m_brow = common.mat('Brow', (0.020, 0.014, 0.011, 1.0), roughness=0.80)
+    brow_col = [srgb_to_linear(c) for c in lm.get('brow_srgb', [0.114, 0.067, 0.082])]
+    print('BROW_LINEAR', [round(c, 5) for c in brow_col])
+    m_brow = common.mat('Brow', tuple(brow_col) + (1.0,), roughness=0.85)
     m_silver = common.mat('Silver', (0.90, 0.90, 0.92, 1.0), roughness=0.20, metallic=1.0)
 
     a = lm['eye_radius']
@@ -317,6 +319,7 @@ def main():
         x_in, x_out = (brow.x + half, brow.x - half) if side == 'L' else (brow.x - half, brow.x + half)
         bm = make_brow(face, f'eyebrow_{side}_mesh', x_in, x_out, brow.z, lm['brow_h'], m_brow)
         recalc_and_solidify(bm, 0.0)
+        shade_smooth(bm)
         bp, _ = face.front(brow.x, brow.z)
         bone_specs.append((f'eyebrow_{side}', bp if bp else brow))
         pending.append((bm, f'eyebrow_{side}'))
