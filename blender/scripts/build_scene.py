@@ -125,5 +125,11 @@ common.render(os.path.join(common.RENDERS, 'scene_v1_screens.png'))
 for sm in screen_mats:
     sm.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = 0.0
 
+# restaurar la camara de aprobacion original antes de guardar: las tareas
+# posteriores abren scene.blend y renderizan directamente con esa camara.
+cam.location = (-1.3, 3.7, 1.95)
+common.look_at(cam, (0, 0.5, 1.05))
+cam.data.lens = 35
+
 print('SCENE_TRIS', common.scene_tri_count())
 common.save(os.path.join(common.BLEND_DIR, 'scene.blend'))
