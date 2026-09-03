@@ -373,7 +373,7 @@ git commit -m "feat: material del personaje sin metal/emision y textura limpia (
 - Modify: `blender/scripts/assemble.py:15` (`MOTO_LENGTH`)
 
 **Interfaces:**
-- Produces: objetos nuevos en `scene.blend`: `wall_back_L`, `wall_back_R`, `wall_back_top`, `wall_back_bottom`, `wall_left`, `wall_right`, `ceiling`, `shelf_bracket_0`, `shelf_bracket_1`, `shelf_arm_0`, `shelf_arm_1`; material `Wall`. Renombra `window_post_-2`/`window_post_2` → `window_post_L`/`window_post_R`. `moto_anchor` en (2.0, −1.52, 1.465). `shelf` en (2.0, −1.52, 1.45).
+- Produces: objetos nuevos en `scene.blend`: `wall_back_L`, `wall_back_R`, `wall_back_top`, `wall_back_bottom`, `wall_left`, `wall_right`, `ceiling`, `shelf_bracket_0`, `shelf_bracket_1`, `shelf_arm_0`, `shelf_arm_1`; material `Wall`. Renombra `window_post_-2`/`window_post_2` → `window_post_L`/`window_post_R`. `moto_anchor` en (2.0, −1.58, 1.465). `shelf` en (2.0, −1.58, 1.45) (y = ROOM_Y_BACK + SHELF_D/2).
 - Consumes: nada nuevo.
 
 - [ ] **Step 1: Actualizar `check_scene.py` (falla antes de implementar)**
