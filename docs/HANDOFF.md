@@ -38,14 +38,15 @@ Sebastián Escobar, desarrollador web de Medellín (Campo Valdés). Moda urbana,
 | 6 Importar personaje (import_character.py, check_rig.py) | ✅ completa | autodetección de orientación con el hueso headfront (rota 180° si mira a -Y; el importador glTF deja el armature en QUATERNION, por eso se fuerza rotation_mode XYZ); cámara de control en +Y; check_rig valida headfront.y > spine006.y |
 | 6b Logo en el pecho (apply_chest_logo.py) | ✅ completa | borra el "SE" por texel (componentes conexos en espacio mundo, excluye cordones/cuello) y compone `refs/logo.png` como estampado CLARO (luminancia invertida, brillo morado conservado) porque el hoodie es casi negro. Render: generated/renders/chest_logo.png. Variante oscura de comparación: chest_logo_dark.png (`-- --dark`). Es idempotente: parte siempre de generated/character_texture_original.png. **Rerun obligatorio tras cada import_character.py.** |
 | 7 Pose sentada (pose_probe.py, poses.py, sit_test.py) | ✅ completa (5128355) | ejes calibrados (shin = (0,-1), no (0,1)); brazos con eulers horneados por `poses.aim()`; render de aprobación generated/renders/sit_v_final.png (+_legs, _hands) enviado al usuario |
-| 8 Párpados, cejas, candongas (add_face_parts.py) | 🔄 subagente en curso | rejilla y cámaras espejadas a +Y |
-| 9, 11-13 Blender (animaciones, ensamblaje, export, visor) | ⏳ | |
-| 10 Moto + ventana Medellín (Higgsfield) | ⏳ | |
+| 8 Párpados, cejas, candongas (render_face_grid.py, add_face_parts.py, checks/check_face_export.py) | ✅ completa (dea3b6f) | huesos eyelidL/R (+70° X = cerrado), eyebrow_L/R (+0.012 Z = levantada) con ejes locales = mundo; 8 mallas parentadas a hueso (exportan como hijas del hueso, verificado); 39 496 tris; renders face_parts_open/closed_browup/ear_L/ear_R.png. add_face_parts.py es idempotente y modifica character.blend en sitio (NO reejecutar import_character.py sin repetir luego apply_chest_logo.py y add_face_parts.py) |
+| 9 Animaciones (animate.py → character_anim.blend) | 🔄 subagente en curso | |
+| 11-13 Blender (ensamblaje, export, visor) | ⏳ | |
+| 10 Moto + ventana Medellín (Higgsfield) | 🔄 imágenes listas; malla 3D PARADA por créditos | generated/moto/dr150.png (ref foto subida con media_upload+curl+media_confirm), generated/window/medellin_a/b.png con marco pintado → recorte 16:9 sin marco de "a" = generated/window/medellin.png (build_scene.py reejecutado). Malla image_to_3d (8k tris, textura) = 30 créditos → superaría el límite de 100: pedir aprobación al usuario antes de lanzarla |
 | 14 Cierre / README | ⏳ | |
 
 ## Créditos Higgsfield
 
-Saldo inicial 186. Gastados: 80 (10 en láminas + 35 malla v1 + 35 malla v2). Log en `generated/credits.log`. Límite acordado: avisar antes de pasar de 100.
+Saldo inicial 186. Balance real consultado antes de la Tarea 10: 94.8 (≈91 gastados; el log contaba 80). Tarea 10 gastó 4 más (ventana x2 + moto x1) → balance ≈90.8, ≈95 gastados. Log en `generated/credits.log`. Límite acordado: avisar antes de pasar de 100 → la malla de la moto (30) necesita el visto bueno del usuario.
 
 ## Archivos generados clave
 
@@ -57,6 +58,7 @@ Saldo inicial 186. Gastados: 80 (10 en láminas + 35 malla v1 + 35 malla v2). Lo
 ## Pendiente del usuario
 
 - Aprobar el logo en el pecho (generated/renders/chest_logo.png) — versión clara por defecto; si prefiere la tinta oscura original: chest_logo_dark.png.
-- Aprobar la pose sentada (generated/renders/sit_v_final.png).
+- Aprobar la pose sentada (generated/renders/sit_v_final.png) y la cara (face_parts_open.png / face_parts_closed_browup.png).
+- Elegir vista de ventana (medellin_a recortada por defecto, o medellin_b) y AUTORIZAR los 30 créditos de la malla 3D de la moto (o aceptar una moto procedural/omitirla).
 - Opcional: dejar `refs/code/*.ts` para la pantalla de código (si no, código de ejemplo). Logo ya entregado.
 - Fotos definitivas de cara (opcional) para afinar el parecido al final (Tarea 14).

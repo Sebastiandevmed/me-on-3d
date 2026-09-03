@@ -94,7 +94,9 @@ else:
     # sin imagen todavia: fondo nocturno azulado en vez de blanco quemado
     m_far = mat('Window_Far', (0, 0, 0, 1), roughness=1.0,
                 emission=(0.02, 0.05, 0.12, 1), emission_strength=0.4)
-plane('window_far', (4.0, 2.25), (0, -1.6, 1.55), rotation=(math.radians(-90), 0, 0), material=m_far, collection=col)
+# rotación (90°,0,180°): normal hacia +Y (la habitación) y el eje V de la textura hacia +Z.
+# Con (-90,0,0) la normal también mira a +Y pero la imagen queda cabeza abajo.
+plane('window_far', (4.0, 2.25), (0, -1.6, 1.55), rotation=(math.radians(90), 0, math.radians(180)), material=m_far, collection=col)
 m_frame = mat('Window_Frame', (0.03, 0.03, 0.035, 1), roughness=0.6)
 box('window_near', (4.2, 0.06, 0.25), (0, -1.4, 0.42), m_frame, col)          # antepecho
 for x in (-2.1, 2.1):
