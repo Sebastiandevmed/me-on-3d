@@ -186,21 +186,32 @@ check_sit_arms()
 
 
 # --------------------------------------------------------------------------- 1) typing
-# 48 frames en bucle. Sin dedos: alterna el levante de muneca de cada mano (~17 grados:
-# la direccion de la mano pasa de (.., 0.995, 0) a (.., 0.995, 0.30)) y
-# acompana con un levante minimo de antebrazo. Ni columna ni cabeza.
-# La oscilacion es ASIMETRICA: `up` va de 0 (pose SIT, palma sobre el laptop) a 1 (mano
-# arriba). Con +-amp simetrico la carrera hacia abajo metia las yemas ~3.4 cm en el
-# escritorio (hallazgo de la tarea 11: 319 vertices dentro del tablero en f12).
+# 48 frames en bucle. Sin dedos: cada mano "golpea" 6 veces por ciclo en instantes irregulares
+# (no a contratiempo perfecto) con una bajada rapida de 2 frames desde un hover bajo; entre
+# golpes las manos apenas flotan (HOVER) y derivan lateralmente despacio como si buscaran
+# teclas. La carrera maxima (0.18) es menor que la version 1 (0.30), que parecia dar masajes.
+# `up` = 0 es la pose SIT (palma sobre el laptop); 1 = mano arriba.
+STRIKES = {'L': (3, 11, 17, 27, 35, 43), 'R': (7, 13, 21, 31, 39, 45)}
+HOVER, STROKE, DIP_FRAMES = 0.35, 0.18, 2.0
+
+
+def typing_up(side, f):
+    """0..1: hover entre golpes, cae a 0 en el frame del golpe (ventana triangular de 2 frames)."""
+    fc = ((f - 1) % 48) + 1
+    best = min(min(abs(fc - s), 48 - abs(fc - s)) for s in STRIKES[side])
+    dip = max(0.0, 1.0 - best / DIP_FRAMES)
+    return HOVER * (1.0 - dip)
+
+
 act = new_action('typing', ARM_BONES)
-for f in range(1, 50, 4):                       # 1..49; el 49 repite el 1 (bucle limpio)
+for f in range(1, 50, 2):                       # 1..49; el 49 repite el 1 (bucle limpio)
     t = (f - 1) / 48.0 * 2 * math.pi
-    ph = {'L': t, 'R': t + math.pi}
-    up = lambda s: 0.5 * (1.0 + math.sin(ph[s]))        # 0..1, L y R a contratiempo
+    drift = 0.02 * math.sin(t)                  # deriva lateral lenta (m, en la direccion de la mano)
+    up = lambda s: typing_up(s, f)
     key_pose(f, solve_arms(
-        upper=lambda s: (-SX[s] * 0.06, 0.0 + 0.024 * up(s), -0.998),
-        fore=lambda s: (SX[s] * 0.13, 0.99, 0.02 + 0.10 * up(s)),
-        hand=lambda s: (SX[s] * (0.05 + 0.030 * math.sin(ph[s] * 2)), 0.995, 0.30 * up(s)),
+        upper=lambda s: (-SX[s] * 0.06 + drift * 0.3, 0.0 + 0.012 * up(s), -0.998),
+        fore=lambda s: (SX[s] * 0.13 + drift, 0.99, 0.02 + 0.05 * up(s)),
+        hand=lambda s: (SX[s] * 0.05 + drift, 0.995, STROKE * up(s)),
     ))
 finish(act, 48, cyclic=True)
 
