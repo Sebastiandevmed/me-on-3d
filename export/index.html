@@ -500,6 +500,12 @@ marcarPunto();
 const planPlano = window.__planPlano;
 const plan = () => !!window.__plano;
 
+// Lo que hace la rama con 3D al cambiar de seccion. Queda en null si no hay escena, y el
+// observador de mas abajo es UNO SOLO: si se montaran dos (uno por rama) y el plan B entrara
+// tarde — un GLB que no llega a los 10 s — el que quedaba vivo era el de la rama muerta y el
+// hilo de secciones se congelaba a mitad de pagina.
+let alEntrar = null;
+
 // ?3d=off fuerza el plan B (lo usa tools/landing_probe.mjs para probarlo sin romper WebGL).
 if (!hasWebGL() || Q.get('3d') === 'off') {
   planPlano(hasWebGL() ? 'forzado' : 'sin-webgl');
@@ -538,25 +544,15 @@ av.onFrame((dt) => {
 // Girar el telefono cambia cual es el encuadre correcto.
 addEventListener('resize', () => path.setVariant(esMovil() ? 'movil' : null));
 
-// ---- que seccion manda. Se toma la que ocupa mas parte de la ventana, no "la primera que
-// intersecta": con secciones de una pantalla completa, dos cumplen a la vez a mitad de scroll.
-const visible = new Map();
-const io = new IntersectionObserver((ent) => {
-  if (plan()) return;                     // el 3D se cayo: el canvas ya no manda nada
-  for (const e of ent) visible.set(e.target.id, e.intersectionRatio);
-  let mejor = actual, r = 0;
-  for (const [id, v] of visible) if (v > r) { r = v; mejor = id; }
-  if (mejor === actual) return;
-  actual = mejor;
-  marcarPunto();
-  if (quieto) path.snap(actual); else path.goTo(actual);
+alEntrar = (seccion) => {
+  if (quieto) path.snap(seccion); else path.goTo(seccion);
   // entrar a "como trabajo" saluda; en modo reducido no.
-  if (actual === 'sobreMi' && !quieto) av.vibe();
-  const dentro = ORDEN.indexOf(actual) <= LIMITE;
+  if (seccion === 'sobreMi' && !quieto) av.vibe();
+  const dentro = ORDEN.indexOf(seccion) <= LIMITE;
   document.body.dataset['3d'] = dentro ? 'on' : 'off';
-  if (dentro) av.start(); else setTimeout(() => { if (document.body.dataset['3d'] === 'off') av.stop(); }, 700);
-}, { threshold: [0, .15, .3, .5, .7, .9] });
-for (const id of ORDEN) { const el = document.getElementById(id); if (el) io.observe(el); }
+  // El fundido del canvas dura 0.6 s: parar el bucle antes se ve como un tiron.
+  if (dentro) av.start(); else setTimeout(() => { if (document.body.dataset['3d'] !== 'on') av.stop(); }, 700);
+};
 
 // Contrato con tools/landing_probe.mjs
 window.__landing = {
@@ -575,17 +571,20 @@ window.__landing = {
 
 }  // fin de la rama con 3D
 
-// ---- lo que funciona igual con y sin 3D
-// En el plan B el hilo de secciones tambien tiene que seguir al scroll.
-if (plan()) {
-  const io2 = new IntersectionObserver((ent) => {
-    let mejor = actual, r = 0; const vis = new Map();
-    for (const e of ent) vis.set(e.target.id, e.intersectionRatio);
-    for (const [id, v] of vis) if (v > r) { r = v; mejor = id; }
-    if (mejor !== actual) { actual = mejor; marcarPunto(); }
-  }, { threshold: [0, .3, .6] });
-  for (const id of ORDEN) { const el = document.getElementById(id); if (el) io2.observe(el); }
-}
+// ---- que seccion manda. Se toma la que ocupa mas parte de la ventana, no "la primera que
+// intersecta": con secciones de una pantalla completa, dos cumplen a la vez a mitad de scroll.
+// Corre con y sin escena: el hilo de secciones tiene que seguir al scroll igual.
+const visible = new Map();
+const io = new IntersectionObserver((ent) => {
+  for (const e of ent) visible.set(e.target.id, e.intersectionRatio);
+  let mejor = actual, r = 0;
+  for (const [id, v] of visible) if (v > r) { r = v; mejor = id; }
+  if (mejor === actual) return;
+  actual = mejor;
+  marcarPunto();
+  if (alEntrar && !plan()) alEntrar(actual);
+}, { threshold: [0, .15, .3, .5, .7, .9] });
+for (const id of ORDEN) { const el = document.getElementById(id); if (el) io.observe(el); }
 
 for (const b of document.querySelectorAll('.copiar')) {
   b.addEventListener('click', async () => {

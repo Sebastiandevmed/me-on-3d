@@ -139,6 +139,27 @@ await planB('plano', `http://127.0.0.1:${PORT}/index.html?3d=off`, []);
 await planB('sincdn', `http://127.0.0.1:${PORT}/index.html`, ['*jsdelivr*']);
 await send('Network.setBlockedURLs', { urls: [] });
 
+// ---- el plan B puede llegar TARDE (un GLB que no termina de bajar a los 25 s). Cuando llega,
+// el resto de la pagina tiene que seguir funcionando: si el observador de secciones fuera el de
+// la rama con 3D, el hilo se congelaba a mitad de pagina.
+await metrics(1440, 900, false);
+await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/index.html` });
+{
+  let listo = false;
+  for (let i = 0; i < 60 && !listo; i++) { await sleep(500); listo = await ev('!!(window.__landing && __landing.status.loaded)'); }
+  await ev(`document.getElementById('sobreMi').scrollIntoView({behavior:'instant',block:'start'});1`);
+  await sleep(1500);
+  await ev(`window.__planPlano('prueba-tardia');1`);
+  await sleep(600);
+  await ev(`document.getElementById('contacto').scrollIntoView({behavior:'instant',block:'start'});1`);
+  await sleep(1200);
+  const sec = await ev('__landing.seccion');
+  if (sec !== 'contacto') fails.push(`[tardio] tras caer el 3D el hilo se quedo en ${sec} en vez de contacto`);
+  const marcado = await ev(`document.querySelector('#hilo a[href="#contacto"]').getAttribute('aria-current')`);
+  if (marcado !== 'true') fails.push(`[tardio] el punto de contacto no quedo marcado (aria-current=${marcado})`);
+  console.log(`LANDING tardio   el 3D cae a mitad de pagina · el hilo sigue en ${sec}`);
+}
+
 // ---- sin JavaScript no corre ni el script clasico: el respaldo es el <noscript><style>.
 // Si esa hoja se desincroniza de las reglas de body[data-3d="none"], la pantalla de carga
 // vuelve a tapar el sitio entero y nadie se entera hasta que alguien entra con JS apagado.
