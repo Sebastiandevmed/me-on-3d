@@ -35,8 +35,9 @@ REF_MIN = 12        # minimo de texeles de referencia en la ventana
 REF_STD_MAX = 0.06  # entorno "uniforme": desviacion de luminancia por debajo de esto
 JUMP = 0.16         # salto de luminancia texel-vs-entorno que delata una raya
 BROW_DZ = 0.019     # m arriba/abajo del centro de la ceja pintada (brow_h = 0.021 -> +-0.0105, mas el arco y las puntas; el ojo llega a 1.585)
-BROW_DX = 0.016     # m de margen a cada lado del largo de la ceja
-BROW_NY = 0.25      # normal.y minima: solo caras frontales (la visera mira abajo, las sienes al lado)
+BROW_DX = 0.008     # m de margen a cada lado del largo de la ceja
+BROW_NY = 0.40      # normal.y minima: solo caras frontales (la visera mira abajo, las sienes al lado)
+BROW_DY = 0.010     # m: la cara debe estar a esta distancia (o menos) por delante del landmark de la ceja; la visera sobresale 4-7 cm y NO es piel
 BROW_DARK = 0.45    # luminancia por debajo de la cual un texel de la zona es ceja
 BROW_SOFT = 0.62    # entre DARK y SOFT: borde antialiasado y la sombra pintada bajo la ceja, se funden con la piel
 BROW_COPY_DZ = 0.026 # m: la piel de relleno se copia de la frente, esta altura por encima de cada texel (raycast); si pega en pelo/gorra, relleno dilatado
@@ -145,7 +146,7 @@ def main():
         ok = False
         for side in ('L', 'R'):
             b = lm[f'brow_{side}']
-            if abs(c.x - b[0]) <= half + BROW_DX and abs(c.z - b[2]) <= BROW_DZ:
+            if abs(c.x - b[0]) <= half + BROW_DX and abs(c.z - b[2]) <= BROW_DZ and c.y <= b[1] + BROW_DY:
                 ok = True
         if not ok: continue
         ntri += 1

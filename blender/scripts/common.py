@@ -162,6 +162,27 @@ def save(path):
     bpy.ops.wm.save_as_mainfile(filepath=path)
     print('SAVED', path)
 
+def setup_viewport(shading='MATERIAL'):
+    """Deja todos los visores 3D del archivo mirando por la camara de la escena y en Material Preview,
+    para que el .blend abra listo en la interfaz (los scripts corren sin ventana y la vista guardada
+    quedaba en cualquier sitio, a menudo dentro del escritorio)."""
+    n = 0
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type != 'VIEW_3D':
+                continue
+            for space in area.spaces:
+                if space.type != 'VIEW_3D':
+                    continue
+                space.shading.type = shading
+                space.clip_end = 100.0
+                if space.region_3d is not None:
+                    space.region_3d.view_perspective = 'CAMERA'
+                n += 1
+    print('VIEWPORT', n, 'visores 3D en camara /', shading)
+    return n
+
+
 def fail(msg):
     print('CHECK FAILED:', msg)
     sys.exit(1)

@@ -156,4 +156,5 @@ print('NEUTRAL frame', sc.frame_current, 'action', arm.animation_data.action,
       'emision', {m: round(emis(m).default_value, 2) for m in SCREENS})
 # rutas relativas (HDR, texturas) para que avatar.blend funcione si se mueve el repo
 bpy.ops.file.make_paths_relative()
+common.setup_viewport()      # abre en la interfaz mirando por la camara y en Material Preview
 common.save(os.path.join(common.BLEND_DIR, 'avatar.blend'))
