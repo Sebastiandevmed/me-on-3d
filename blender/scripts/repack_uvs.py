@@ -21,7 +21,7 @@
 # ('UVRepack', el original se borra para no exportar dos TEXCOORD). Idempotente: Body['uv_repacked'].
 # Borra Body['normals_smoothed'] para que smooth_normals.py se repita sobre la malla soldada.
 # --probe: empaqueta y mide (cobertura, histograma de gutter) sin hornear ni guardar.
-# Uso: tools/run_blender.sh blender/character.blend blender/scripts/repack_uvs.py [--probe|--dry-run]
+# Uso: tools/run_blender.sh blender/character.blend blender/scripts/repack_uvs.py [--probe|--dry-run|--force]
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, common
@@ -38,11 +38,11 @@ OLD_ATTR = 'uv_meshy'   # el UV original de Meshy se guarda como atributo de esq
 NEW_UV = 'UVRepack'
 
 args = common.args()
-PROBE, DRY = '--probe' in args, '--dry-run' in args
+PROBE, DRY, FORCE = '--probe' in args, '--dry-run' in args, '--force' in args   # --force: repetir aunque ya este aplicado (p. ej. tras close_gaps.py)
 body = bpy.data.objects.get('Body')
 if not body:
     common.fail('no hay malla Body en el .blend')
-if body.get('uv_repacked') and not PROBE:
+if body.get('uv_repacked') and not PROBE and not FORCE:
     print('REPACK ya aplicado; nada que hacer')
     sys.exit(0)
 if not os.path.exists(SRC):

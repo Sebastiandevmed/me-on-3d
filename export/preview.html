@@ -93,6 +93,7 @@ const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
 let mixer = null, actions = {}, screens = [], bars = [], character = null;
 const clock = new THREE.Clock();
 const mouse = { x: 0, y: 0 };
+window.__view = { camera, controls, THREE, follow: () => follow, browup: () => browup(), mouse };   // para sondas headless (encuadres de detalle)
 addEventListener('mousemove', e => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
@@ -140,6 +141,7 @@ loader.load('avatar.glb?v=' + Date.now(), (gltf) => {
     if (o.name === 'spine003') follow.chest = o;
     if (o.name === 'headphones') follow.hp = o;
     if (o.name === 'Body') character = o;
+    if (o.isMesh && o.material && o.material.map) { o.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy(); o.material.map.needsUpdate = true; }   // texturas nitidas en escorzo
   });
   saveFollow();
   mixer = new THREE.AnimationMixer(gltf.scene);
@@ -188,10 +190,16 @@ loader.load('avatar.glb?v=' + Date.now(), (gltf) => {
 // el resto. Como cada hueso es hijo del anterior, las partes se suman en mundo. El nodo headphones (hijo de la cabeza,
 // audifonos colgando del cuello) cancela el giro para no columpiarse. Se aplica DESPUES del mixer y
 // se deshace antes del siguiente update (los clips base no escriben estos huesos cada frame).
-const YAW_MAX = Math.PI / 4, PITCH_UP = Math.PI / 7.2, PITCH_DOWN = Math.PI / 9;   // 45 / 25 / 20 grados
+// Limites cortos y giro parcial: a 45/25/20 grados la cara se deformaba (la barba se hundia en el
+// collar al mirar abajo y el cuello se retorcia a los lados). Ahora la cabeza recorre GAIN del angulo
+// hacia el cursor (mira "hacia" el cursor, no al cursor) y se detiene en 28 / 12 / 9 grados.
+const YAW_MAX = Math.PI / 6.4, PITCH_UP = Math.PI / 15, PITCH_DOWN = Math.PI / 20;   // 28 / 12 / 9 grados
+const GAIN = 0.6;            // fraccion del angulo geometrico que recorre la cabeza
+const TAU = 0.35;            // s: constante de tiempo del suavizado (independiente del framerate)
+const DEAD = 0.02;           // rad: zona muerta para que el temblor del mouse no mueva la cabeza
 // El cuello NO recibe pitch: el collar y la capucha del hoodie llevan ~30 % de peso de spine005 y al
 // cabecear con el cuello la cabeza se hunde en el collar (se vio en preview_shot.png con el cursor abajo).
-const SHARE = { chest: { yaw: 0.3, pitch: 0 }, neck: { yaw: 0.2, pitch: 0 } };   // la cabeza pone lo que falta hasta 1
+const SHARE = { chest: { yaw: 0.25, pitch: 0 }, neck: { yaw: 0.2, pitch: 0 } };   // la cabeza pone lo que falta hasta 1
 const follow = { head: null, neck: null, chest: null, hp: null };   // Object3D
 const saved = { head: null, neck: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
 const look = { yaw: 0, pitch: 0 };
@@ -208,9 +216,9 @@ function worldRotate(obj, q, weight) {   // newLocal = parent^-1 * slerp(I, q, w
   qTmp.copy(qParent).invert().multiply(qW).multiply(qParent);   // parent^-1 * qW * parent
   obj.quaternion.premultiply(qTmp);
 }
-function applyHeadFollow() {
+function applyHeadFollow(dt) {
   const active = !(exclusive === 'vibe' || exclusive === 'lookAround');
-  followWeight += ((active ? 1 : 0) - followWeight) * 0.08;
+  followWeight += ((active ? 1 : 0) - followWeight) * (1 - Math.exp(-dt / 0.4));
   if (!follow.head) return;
   follow.head.getWorldPosition(vHead);
   camera.getWorldPosition(vCam);
@@ -221,8 +229,10 @@ function applyHeadFollow() {
     vDir.normalize();
     const yaw = Math.atan2(-vDir.x, -vDir.z);          // el personaje mira a -Z
     const pitch = Math.asin(Math.max(-1, Math.min(1, vDir.y)));
-    look.yaw += (Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw)) - look.yaw) * 0.08;
-    look.pitch += (Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch)) - look.pitch) * 0.08;
+    const ty = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw * GAIN)), tp = Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch * GAIN));
+    const k = 1 - Math.exp(-dt / TAU);   // suavizado exponencial por tiempo, no por frame
+    if (Math.abs(ty - look.yaw) > DEAD) look.yaw += (ty - look.yaw) * k;
+    if (Math.abs(tp - look.pitch) > DEAD) look.pitch += (tp - look.pitch) * k;
   }
   if (followWeight < 0.001) return;
   let yawLeft = 1, pitchLeft = 1;
@@ -253,7 +263,7 @@ function animate() {
   undoFollow();
   if (mixer) mixer.update(dt);
   saveFollow();
-  applyHeadFollow();
+  applyHeadFollow(dt);
   if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); for (const [n, l] of Object.entries(screenLights)) l.intensity = 1.6 * k * k; }
   bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; barLights[i] && barLights[i].color.copy(b.material.emissive); });
   controls.update(); renderer.render(scene, camera);
