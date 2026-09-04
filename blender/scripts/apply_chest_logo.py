@@ -23,7 +23,19 @@ import numpy as np
 import common
 
 WHITE_THRESHOLD = 0.55
-LOGO_SCALE = 1.3
+# 1.3 dejaba el logo del tamano del monograma SE y a esa escala no se leia nada. El pecho
+# ocupa ~90 px en pantalla en el encuadre de aprobacion: el emblema tiene que ser grande.
+LOGO_SCALE = 1.65
+# El logo de origen es un grabado de linea fina CON GRANO (puntitos). Al bajarlo a la
+# resolucion del atlas y hornearlo al UV nuevo, las lineas se rompen y el grano se convierte
+# en ruido: en el visor se veia una mancha blanca irreconocible. Se binariza y se engorda el
+# trazo, que conserva la FORMA y tira el grano; ademas encaja con el look cel del visor.
+INK_LUM = 0.42       # luminancia por debajo de la cual un pixel del logo es tinta
+INK_ALPHA = 0.40     # alfa minimo para considerar el pixel parte del dibujo
+INK_GROW = 0.006     # fraccion del ancho del logo que engorda cada trazo (a 500 px: 3 px);
+                     # a 0.012 las hojas del laurel se fundian en manchas y la reja del globo se cerraba
+INK_PURPLE = 0.30    # densidad local minima para que una zona cuente como brillo morado (mata el grano)
+INK_SOFT = 2         # radio del suavizado del borde (antialias del estarcido)
 MERGE_DIST = 0.02    # m: white blobs closer than this to the main blob count as the monogram
 ERASE_DILATE = 2     # grid cells (4 mm each) of world-space dilation around the monogram
 
@@ -85,19 +97,56 @@ def debug_white_map(wx, wz, white, path, cell=0.002):
     print('WHITE_MAP', path, W, 'x', H)
 
 
+def box_blur(a, r):
+    """Media de caja de radio r sobre un array 2D float (separable, por sumas acumuladas)."""
+    if r < 1:
+        return a
+    out = a.astype(np.float32)
+    for axis in (0, 1):
+        n = out.shape[axis]
+        c = np.cumsum(np.concatenate([np.zeros((1,) + out.shape[1:], np.float32) if axis == 0
+                                      else np.zeros((out.shape[0], 1), np.float32), out], axis=axis), axis=axis)
+        lo = np.clip(np.arange(n) - r, 0, n)
+        hi = np.clip(np.arange(n) + r + 1, 0, n)
+        take = (lambda idx: c[idx]) if axis == 0 else (lambda idx: c[:, idx])
+        out = (take(hi) - take(lo)) / (hi - lo).reshape((-1, 1) if axis == 0 else (1, -1))
+    return out
+
+
 def to_light_print(logo):
-    """The logo is dark ink on transparent; the hoodie is near-black. Turn it into a
-    light print: invert luminance for the grey ink, keep (and brighten) the purple glow."""
+    """Convierte el logo en un ESTARCIDO claro sobre el hoodie casi negro.
+
+    La version anterior invertia la luminancia pixel a pixel. Eso conserva el grano del
+    grabado de origen y las lineas de un texel de ancho, que no sobreviven ni al atlas ni al
+    horneado al UV nuevo ni al JPEG: en el visor el emblema salia como una mancha blanca
+    rota. Aqui se binariza la tinta, se ENGORDA el trazo (INK_GROW) y se suaviza el borde,
+    que es lo que hace que la forma siga leyendose a 90 px de pecho — y ademas es lo que le
+    corresponde al look cel del visor.
+
+    El brillo morado de la lanza se detecta por tono en el original y se pinta encima del
+    estarcido, tambien engordado, para que no se pierda.
+    """
     rgb = logo[..., :3]
-    lum = rgb.mean(axis=2, keepdims=True)
-    light = np.repeat(1.0 - lum, 3, axis=2)
-    mx = rgb.max(axis=2, keepdims=True)
-    mn = rgb.min(axis=2, keepdims=True)
-    sat = mx - mn
-    purple = np.clip((rgb[..., 2:3] - rgb[..., 1:2]) * 3.0, 0, 1) * np.clip(sat * 4.0, 0, 1)
-    bright = rgb / np.maximum(mx, 1e-4)
-    out = logo.copy()
-    out[..., :3] = light * (1 - purple) + bright * purple
+    alpha = logo[..., 3]
+    lum = rgb.mean(axis=2)
+    r = max(1, int(round(logo.shape[1] * INK_GROW)))
+
+    ink = dilate((alpha > INK_ALPHA) & (lum < INK_LUM), r)
+    soft = np.clip(box_blur(ink.astype(np.float32), INK_SOFT), 0, 1)[..., None]
+
+    mx = rgb.max(axis=2); mn = rgb.min(axis=2)
+    # El grabado tiene grano morado disperso por todo el laurel. Sin filtrar por DENSIDAD
+    # local, cada punto suelto se engorda y el emblema sale con salpicaduras lavanda.
+    purple_src = (np.clip((rgb[..., 2] - rgb[..., 1]) * 3.0, 0, 1) *
+                  np.clip((mx - mn) * 4.0, 0, 1) * (alpha > INK_ALPHA)) > 0.25
+    purple_src = box_blur(purple_src.astype(np.float32), max(2, r)) > INK_PURPLE
+    purple = np.clip(box_blur(dilate(purple_src, r).astype(np.float32), INK_SOFT), 0, 1)[..., None]
+
+    INK_RGB = np.array([0.93, 0.93, 0.96], np.float32)    # tinta clara, apenas fria
+    GLOW_RGB = np.array([0.62, 0.32, 1.00], np.float32)   # morado de la lanza
+    out = np.empty_like(logo)
+    out[..., :3] = INK_RGB * (1 - purple) + GLOW_RGB * purple
+    out[..., 3] = np.maximum(soft[..., 0], purple[..., 0])
     return out
 
 

@@ -41,8 +41,19 @@ LID_THICK = 0.0015      # m de grosor del párpado (solidify)
 LID_PIVOT_BACK = 0.006  # m hacia dentro de la cara donde queda el pivote
 LID_PIVOT_UP = 0.016    # m por encima del centro del ojo donde queda el pivote
 BROW_OFFSET = 0.0003    # m que la ceja sobresale de la piel (apenas apoyada)
-BROW_THICK = 0.0030     # m de bulto de la ceja (perfil eliptico, se afila en las puntas)
-BROW_ARCH = 0.0015      # m de arco de la ceja
+BROW_THICK = 0.0022     # m de bulto de la ceja (perfil eliptico, se afila en las puntas)
+BROW_ARCH = 0.0022      # m de arco de la ceja
+# La ceja de malla se hizo en su dia MAS GRANDE que la pintada para taparla. Desde la sesion 5
+# `texture_touchup.py` BORRA la pintada, asi que ya no hace falta: con brow_h = 21 mm y
+# brow_len = 66 mm salian dos barras negras de lado a lado que se leian como un antifaz.
+# Estas escalas las devuelven a proporcion de ceja real (~11 mm de alto, ~55 mm de largo).
+BROW_H_SCALE = 0.52
+BROW_LEN_SCALE = 0.84
+# El landmark brow_srgb (0.114, 0.067, 0.082) es el color MEDIDO de la ceja PINTADA: casi
+# negro y con mas azul que verde, o sea morado. Como color de la ceja de malla no sirve — en
+# negro se lee como un antifaz y aclarado sin mas se lee como una mancha lila. Se fija aqui un
+# castaño oscuro emparentado con la barba (sRGB medido 0.34/0.27/0.30, ver face_features.py).
+BROW_SRGB = (0.26, 0.185, 0.155)
 BROW_SEGS = 11          # secciones a lo largo de la ceja
 BROW_PROF = 8           # vertices del perfil eliptico
 BONE_LEN = 0.015
@@ -238,8 +249,10 @@ def make_lid(face, name, centre, a, b, material, ey_hint):
 
 
 def make_brow(face, name, x_in, x_out, z_c, h, material):
-    """Cordon curvo de seccion eliptica apoyado en la frente, afilado en las puntas,
-    algo mas grande que la ceja pintada para taparla."""
+    """Cordon curvo de seccion eliptica apoyado en la frente y afilado en las puntas.
+
+    `h` llega ya escalado por BROW_H_SCALE: ver la nota de esa constante sobre por que la ceja
+    dejo de tener que ser mas grande que la pintada."""
     up = Vector((0.0, 0.0, 1.0))
     n, prof = BROW_SEGS, BROW_PROF
     verts, faces = [], []
@@ -311,7 +324,7 @@ def main():
     skin = [srgb_to_linear(c) for c in lm.get('skin_srgb', [0.93, 0.63, 0.54])]
     print('SKIN_LINEAR', [round(c, 4) for c in skin])
     m_skin = common.mat('Eyelid', tuple(skin) + (1.0,), roughness=0.72)
-    brow_col = [srgb_to_linear(c) for c in lm.get('brow_srgb', [0.114, 0.067, 0.082])]
+    brow_col = [srgb_to_linear(c) for c in BROW_SRGB]
     print('BROW_LINEAR', [round(c, 5) for c in brow_col])
     m_brow = common.mat('Brow', tuple(brow_col) + (1.0,), roughness=0.85)
     m_silver = common.mat('Silver', (0.90, 0.90, 0.92, 1.0), roughness=0.20, metallic=1.0)
@@ -340,9 +353,9 @@ def main():
         pending.append((lid, f'eyelid{side}'))
 
         brow = Vector(lm[f'brow_{side}'])
-        half = lm['brow_len'] / 2.0
+        half = lm['brow_len'] * BROW_LEN_SCALE / 2.0
         x_in, x_out = (brow.x + half, brow.x - half) if side == 'L' else (brow.x - half, brow.x + half)
-        bm = make_brow(face, f'eyebrow_{side}_mesh', x_in, x_out, brow.z, lm['brow_h'], m_brow)
+        bm = make_brow(face, f'eyebrow_{side}_mesh', x_in, x_out, brow.z, lm['brow_h'] * BROW_H_SCALE, m_brow)
         recalc_and_solidify(bm, 0.0)
         shade_smooth(bm)
         bp, _ = face.front(brow.x, brow.z)
