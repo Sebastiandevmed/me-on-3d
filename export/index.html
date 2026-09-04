@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Sebastián Escobar — desarrollo web desde Medellín</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Desarrollo web desde Medellín: tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real. Tres trabajos contados por la decisión que hay detrás.">
+<meta name="theme-color" content="#05060a">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://sebastianescobar.dev/">
+<!-- Favicon: la visera de la gorra del avatar, en dos trazos. SVG en linea = cero peticiones. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2305060a'/%3E%3Cpath d='M7 19a9 9 0 0 1 18 0z' fill='%23e8ecf4'/%3E%3Cpath d='M25 19h3v3H7v-3' fill='%234090ff'/%3E%3C/svg%3E">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="Sebastián Escobar — desarrollo web desde Medellín">
+<meta property="og:description" content="Tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real.">
+<meta property="og:image" content="og.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:locale" content="es_CO">
+<meta name="twitter:card" content="summary_large_image">
+<!-- El GLB son 4 MB y sin esto no empieza a bajar hasta que resuelven el modulo y three desde
+     el CDN. Va por script y no como <link> fijo para NO gastarle 4 MB a quien no tiene WebGL2 y
+     nunca va a ver la escena. Repite la comprobacion de hasWebGL() de lib/scene.js a proposito:
+     el modulo carga demasiado tarde para servir de algo aqui.
+     tools/landing_probe.mjs afirma que avatar.glb se pide UNA vez: un `as` o un `crossorigin`
+     que no casen con GLTFLoader lo bajarian dos veces. -->
+<script>
+try { if (window.WebGL2RenderingContext && document.createElement('canvas').getContext('webgl2')) {
+  const l = document.createElement('link');
+  l.rel = 'preload'; l.as = 'fetch'; l.href = 'avatar.glb'; l.crossOrigin = 'anonymous';
+  document.head.appendChild(l);
+} } catch (e) {}
+</script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Paleta sacada de las luces de la propia escena (lib/scene.js), para que el canvas y la
+   pagina sean el mismo mundo: el borde del canvas no se ve porque --noche ES el fondo 3D. */
+:root{
+  --noche:#05060a;          /* scene.background */
+  --tinta:#080a10;          /* fondo del tramo plano: el cuarto apagado, no un gris nuevo */
+  --neon:#4090ff;           /* barras RGB */
+  --ambar:#ffe0c0;          /* luz calida del techo: unico acento calido de la noche */
+  --niebla:#8fb8ff;         /* luz de la ventana: texto secundario */
+  --papel:#e8ecf4;
+  --linea:#182131;
+  --col:min(46ch,42vw);     /* ancho de la columna de texto sobre el 3D */
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--noche);color:var(--papel);
+  font:400 clamp(15px,1.05vw,17px)/1.65 "Instrument Sans",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2,h3{font-family:"Bricolage Grotesque","Instrument Sans",sans-serif;font-weight:800;
+  line-height:.95;letter-spacing:-.025em;margin:0}
+a{color:var(--ambar);text-underline-offset:.25em;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ambar);outline-offset:3px;border-radius:2px}
+.saltar{position:absolute;left:-9999px;top:0;z-index:99;background:var(--ambar);color:var(--noche);
+  padding:.7rem 1rem;font-weight:500}
+.saltar:focus{left:.5rem;top:.5rem}
+
+/* ---- lienzo 3D. Vive fijo detras de la pagina y solo esta encendido en el primer tramo
+   (hero / como trabajo / pantallas). Al entrar a los proyectos se retira Y SE PARA el bucle,
+   que es donde de verdad se recupera bateria: el opacity solo lo esconde. */
+#escena{position:fixed;inset:0;z-index:0;transition:opacity .6s ease}
+#escena canvas{display:block}
+body[data-3d="off"] #escena,body[data-3d="none"] #escena{opacity:0;pointer-events:none}
+body[data-3d="none"] #escena{display:none}
+
+#carga{position:fixed;inset:0;z-index:50;background:var(--noche);display:grid;place-content:center;
+  justify-items:center;gap:1.2rem;transition:opacity .7s ease}
+#carga[hidden]{display:none}
+#carga.listo{opacity:0;pointer-events:none}
+#carga p{margin:0;color:var(--niebla);font-size:.9rem}
+#barra{width:min(280px,60vw);height:2px;background:#1b2432;overflow:hidden}
+#barra i{display:block;height:100%;width:0;background:var(--ambar);transition:width .25s ease}
+
+main{position:relative;z-index:1}
+section{padding:14svh clamp(1.5rem,5vw,5rem)}
+
+/* ---- SECCIONES SOBRE EL 3D -------------------------------------------------------------
+   La columna va a la DERECHA porque camera-path.js manda al personaje al tercio izquierdo. */
+.escena{min-height:100svh;display:grid;align-content:center;position:relative}
+.escena .col{width:var(--col);margin-left:auto;position:relative;z-index:1}
+/* Velo de legibilidad: no es una tarjeta, es la oscuridad del propio cuarto densificada
+   hacia el borde donde se lee. Va anclado a la SECCION, no a la columna: con inset negativo
+   en vw se salia del viewport y metia 356 px de desborde horizontal en movil (lo cazo
+   tools/landing_probe.mjs). */
+.escena::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(90deg,transparent 0%,transparent 46%,color-mix(in srgb,var(--noche) 70%,transparent) 66%,color-mix(in srgb,var(--noche) 90%,transparent) 100%)}
+/* En el plan B el hero lleva su propio velo (::after, mas abajo): dos velos encima del poster
+   lo apagaban del todo. */
+body[data-3d="none"] .escena::before{display:none}
+
+/* ---- SECCIONES PLANAS ------------------------------------------------------------------
+   Al apagarse el 3D el texto NO puede quedarse en la columna derecha: dejaba media pantalla
+   de negro vacio. Estas secciones son de ancho completo y traen su propio fondo, que ademas
+   tapa el fundido del canvas mientras se retira. */
+.plano{background:var(--tinta);position:relative}
+.plano::before{content:"";position:absolute;left:0;right:0;top:-22svh;height:22svh;
+  background:linear-gradient(180deg,transparent,var(--tinta));pointer-events:none}
+.plano + .plano::before{display:none}
+.dentro{max-width:1080px;margin:0 auto}
+
+.kicker{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--niebla);
+  margin:0 0 .9rem;display:flex;align-items:center;gap:.7rem}
+.kicker::after{content:"";flex:1;height:1px;background:var(--linea)}
+h2{font-size:clamp(1.9rem,3.4vw,3rem);margin-bottom:1.2rem}
+.bajada{color:var(--niebla);max-width:52ch;margin:0}
+section p{max-width:46ch}
+section p + p{margin-top:1rem}
+
+/* ---- hero */
+#hero{align-content:end;padding-bottom:12svh}
+#hero .col{width:min(52ch,54vw)}
+#hero h1{font-size:clamp(3rem,7.5vw,6.5rem);margin-bottom:.5rem}
+#hero .sub{font-size:clamp(1.05rem,1.5vw,1.3rem);color:var(--papel);max-width:34ch}
+#hero .lugar{color:var(--niebla);font-size:.9rem;margin-top:1.6rem}
+.pista{margin-top:2.5rem;color:var(--niebla);font-size:.82rem;display:flex;align-items:center;
+  gap:.6rem;flex-wrap:wrap}
+.pista b{font-weight:500;color:var(--papel)}
+body[data-3d="none"] .pista{display:none}
+/* Cuando no hay WebGL el hero se queda sin nada que mirar: entra el render estatico. */
+body[data-3d="none"] #hero{position:relative;background:#000 url(poster.jpg) center/cover no-repeat}
+body[data-3d="none"] #hero::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent 30%,color-mix(in srgb,var(--noche) 62%,transparent) 52%,var(--noche) 78%)}
+
+/* ---- stack: lista, no nube de logos. El peso dice en cuantos proyectos lo uso. */
+.stack{list-style:none;padding:0;margin:1.8rem 0 0;display:flex;flex-wrap:wrap;gap:.5rem .9rem}
+.stack li{color:var(--niebla);font-size:.95rem}
+.stack li[data-peso="alto"]{color:var(--papel);font-weight:500;font-size:1.05rem}
+.leyenda{font-size:.8rem;color:var(--niebla);margin-top:1.4rem;opacity:.8}
+
+/* ---- proyectos: NO son tres tarjetas iguales, porque no son tres cosas iguales. Cada uno
+   trae la pieza que lo explica: el peso de JS, la paleta, o el diagrama del sistema. */
+.proyecto{display:grid;grid-template-columns:minmax(150px,200px) 1fr;gap:2.5rem;
+  padding:3.2rem 0;border-top:1px solid var(--linea)}
+.proyecto > *{min-width:0}   /* sin esto el SVG del diagrama estira la rejilla y desborda la pagina */
+.proyecto .rail{font-size:.85rem;color:var(--niebla);display:flex;flex-direction:column;gap:.5rem}
+.proyecto .num{font-family:"Bricolage Grotesque",sans-serif;font-size:2.4rem;font-weight:800;
+  line-height:1;color:var(--linea)}
+.estado{display:inline-flex;align-items:center;gap:.45rem}
+.estado::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--niebla)}
+.estado.vivo{color:var(--ambar)}
+.estado.vivo::before{background:var(--ambar);box-shadow:0 0 0 3px color-mix(in srgb,var(--ambar) 18%,transparent)}
+.proyecto h3{font-size:clamp(1.5rem,2.6vw,2.1rem);margin-bottom:.7rem}
+.proyecto p{max-width:56ch}
+.decision{margin-top:1.1rem;padding-left:1rem;border-left:2px solid var(--neon);color:var(--papel)}
+.tags{list-style:none;padding:0;margin:1.4rem 0 0;display:flex;flex-wrap:wrap;gap:.4rem}
+.tags li{font-size:.75rem;color:var(--niebla);border:1px solid var(--linea);border-radius:999px;
+  padding:.22rem .6rem}
+
+/* pieza 1: el peso del JavaScript, a escala real. La desproporcion ES el argumento. */
+.pesos{margin:1.6rem 0 0;display:grid;gap:.55rem;max-width:min(100%,520px)}
+.pesos .fila{display:grid;grid-template-columns:4.6rem 1fr 4.6rem;align-items:center;gap:.8rem;
+  font-size:.85rem;color:var(--niebla)}
+.pesos .b{height:12px;background:var(--linea);position:relative}
+.pesos .b span{position:absolute;inset:0 auto 0 0;background:#31405a}
+.pesos .fila.despues .b span{background:var(--ambar);min-width:3px}
+.pesos .val{font-variant-numeric:tabular-nums}
+
+/* pieza 2: la paleta que se entrego, no una captura de ella */
+.paleta{margin:1.6rem 0 0;display:grid;gap:.7rem}
+.paleta .fila{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.paleta .et{font-size:.78rem;color:var(--niebla);width:3.6rem}
+.paleta i{width:34px;height:34px;border-radius:4px;display:block;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.09)}
+.specimen{margin-top:1rem;font-size:.85rem;color:var(--niebla)}
+.specimen b{color:var(--papel);font-weight:400}
+
+/* pieza 3: el diagrama del sistema. En movil se desplaza dentro de su caja, la pagina no. */
+.diagrama{margin:1.6rem 0 0;overflow-x:auto;padding-bottom:.4rem}
+.diagrama svg{display:block;min-width:640px;width:100%;height:auto}
+.traspaso{margin-top:1.2rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.85rem;color:var(--niebla)}
+.pill{border:1px solid var(--linea);border-radius:999px;padding:.25rem .7rem;font-size:.78rem;color:var(--papel);white-space:nowrap}
+.pill.on{border-color:#2f4a2f;color:#a8d8a0}
+.pill.hum{border-color:#4a3a2a;color:var(--ambar)}
+
+/* ---- contacto */
+.enlaces{list-style:none;padding:0;margin:1.8rem 0 0;display:grid;gap:1rem;max-width:520px}
+.enlaces li{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap}
+.enlaces a{font-size:1.05rem}
+.copiar{background:none;border:1px solid var(--linea);color:var(--niebla);border-radius:999px;
+  padding:.2rem .6rem;font:inherit;font-size:.75rem;cursor:pointer}
+.copiar:hover{border-color:var(--niebla);color:var(--papel)}
+footer{padding:2rem clamp(1.5rem,5vw,5rem) 4rem;background:var(--tinta);color:var(--niebla);font-size:.82rem}
+footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  border-top:1px solid var(--linea);padding-top:1.6rem}
+
+/* ---- hilo de secciones: donde vas, y que el 3D vive solo en el primer tramo */
+#hilo{position:fixed;right:1.4rem;top:50%;transform:translateY(-50%);z-index:3;
+  display:grid;gap:.85rem;margin:0;padding:0;list-style:none}
+#hilo a{display:block;width:9px;height:9px;border-radius:50%;border:1px solid #33425c;
+  background:transparent;transition:background .25s,border-color .25s,transform .25s}
+#hilo a[aria-current="true"]{background:var(--ambar);border-color:var(--ambar);transform:scale(1.3)}
+#hilo a:hover{border-color:var(--papel)}
+@media (max-width:1100px){#hilo{display:none}}
+
+@media (max-width:820px){
+  :root{--col:100%}
+  .col,#hero .col{width:100%;margin-left:0}
+  /* En una sola columna el texto va DEBAJO del personaje, no al lado: la camara vertical de
+     camera-path.js sube al personaje al tercio de arriba y el velo pasa a horizontal. */
+  .escena{align-content:end;padding-bottom:10svh}
+  .escena::before{
+    background:linear-gradient(180deg,transparent 0%,transparent 26%,color-mix(in srgb,var(--noche) 86%,transparent) 52%,var(--noche) 88%)}
+  section{padding:12svh clamp(1.2rem,5vw,2rem)}
+  .proyecto{grid-template-columns:1fr;gap:1.2rem;padding:2.6rem 0}
+  .proyecto .rail{flex-direction:row;align-items:baseline;gap:1rem;flex-wrap:wrap}
+  .proyecto .num{font-size:1.6rem}
+  body[data-3d="none"] #hero{background-position:60% center}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  #escena,#carga,#hilo a{transition:none}
+}
+</style>
+</head><body data-3d="on">
+
+<a class="saltar" href="#contenido">Saltar al contenido</a>
+
+<div id="carga"><p id="cargaTxt">cargando el cuarto…</p><div id="barra"><i></i></div></div>
+<div id="escena" aria-hidden="true"></div>
+
+<ul id="hilo" aria-label="Secciones">
+  <li><a href="#hero" aria-label="Portada"></a></li>
+  <li><a href="#sobreMi" aria-label="Cómo trabajo"></a></li>
+  <li><a href="#stack" aria-label="Lo que hay en las pantallas"></a></li>
+  <li><a href="#proyectos" aria-label="Tres trabajos"></a></li>
+  <li><a href="#contacto" aria-label="Hablemos"></a></li>
+</ul>
+
+<main id="contenido">
+  <section id="hero" class="escena">
+    <div class="col">
+      <h1>Sebastián Escobar</h1>
+      <p class="sub">Desarrollo web desde Medellín. Tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real.</p>
+      <p class="lugar">Campo Valdés, Medellín</p>
+      <p class="pista" id="pista"><b>Mové el mouse</b> — él te sigue. Hacé clic encima y se pone los audífonos.</p>
+    </div>
+  </section>
+
+  <section id="sobreMi" class="escena">
+    <div class="col">
+      <p class="kicker">Cómo trabajo</p>
+      <h2>La decisión, no la cantidad de código</h2>
+      <p>En Amaranthus Gold reescribí mi propia arquitectura: había entregado un front en React y lo migré a Liquid con JavaScript plano. El sitio pasó de 460&nbsp;KB de JS a 12&nbsp;KB.</p>
+      <p>Revisar lo que uno ya entregó es incómodo y es la parte que más enseña. Es exactamente lo mismo que hago cuando entro a un proyecto de otro: primero entender por qué está así, después tocar.</p>
+    </div>
+  </section>
+
+  <section id="stack" class="escena">
+    <div class="col">
+      <p class="kicker">Lo que hay en las pantallas</p>
+      <h2>Herramientas que uso de verdad</h2>
+      <p>Ordenadas por en cuántos proyectos las tengo puestas hoy, no por cuáles suenan mejor.</p>
+      <ul class="stack">
+        <li data-peso="alto">React</li><li data-peso="alto">TypeScript</li><li data-peso="alto">Supabase</li>
+        <li data-peso="alto">Python</li><li data-peso="alto">GSAP</li>
+        <li>Next.js</li><li>Cloudflare Workers</li><li>Node y Express</li><li>Shopify Liquid</li>
+        <li>Twilio</li><li>Redis</li><li>Postgres</li><li>Tailwind</li><li>Playwright</li><li>Vitest</li><li>Zod</li>
+      </ul>
+      <p class="leyenda">Las grandes están en tres proyectos a la vez. Las pequeñas, en uno.</p>
+    </div>
+  </section>
+
+  <section id="proyectos" class="plano">
+    <div class="dentro">
+      <p class="kicker">Tres trabajos</p>
+      <h2>Uno en producción, uno de consultoría, uno que atiende clientes solo</h2>
+      <p class="bajada">Cada uno resolvió un problema distinto, así que cada uno se cuenta distinto.</p>
+
+      <article class="proyecto">
+        <div class="rail">
+          <span class="num">01</span>
+          <span class="estado vivo">En producción</span>
+          <span>Joyería de lujo · Shopify</span>
+          <span><a href="https://amaranthusgold.com" rel="noopener">amaranthusgold.com</a></span>
+        </div>
+        <div class="cuerpo">
+          <h3>Amaranthus Gold</h3>
+          <p>Tema Shopify 2.0 hecho a medida con 163 productos cargados y un generador de catálogo en PDF escrito en Python, para que el equipo arme una propuesta de venta sin diseñador.</p>
+          <p class="decision">Yo mismo había entregado el front en React. Lo migré a Liquid + JavaScript plano y documenté por qué: en una tienda, el JavaScript que no se descarga es la mejor optimización que existe.</p>
+          <div class="pesos" role="img" aria-label="JavaScript enviado al navegador: antes 460 KB, después 12 KB.">
+            <div class="fila"><span>Antes</span><span class="b"><span style="width:100%"></span></span><span class="val">460 KB</span></div>
+            <div class="fila despues"><span>Después</span><span class="b"><span style="width:2.6%"></span></span><span class="val">12 KB</span></div>
+          </div>
+          <ul class="tags"><li>Shopify Liquid</li><li>JS plano</li><li>Python</li><li>163 productos</li></ul>
+        </div>
+      </article>
+
+      <article class="proyecto">
+        <div class="rail">
+          <span class="num">02</span>
+          <span class="estado">Propuesta entregada</span>
+          <span>Eco-hotel · Consultoría</span>
+        </div>
+        <div class="cuerpo">
+          <h3>Holistic Eco·Hotel</h3>
+          <p>Investigación de marca, sistema de diseño completo con paleta día y noche, tres familias tipográficas con su jerarquía, y una maqueta funcional para que el cliente pudiera verlo antes de decidir.</p>
+          <p class="decision">Acá el trabajo no fue de programación: fue de consultoría. La pregunta no era cómo construirlo sino qué construir, y la respuesta se entregó en forma de sistema, no de pantallas sueltas.</p>
+          <div class="paleta">
+            <div class="fila"><span class="et">Día</span>
+              <i style="background:#F6F1E7" title="bone"></i><i style="background:#D9C7A7" title="sand"></i>
+              <i style="background:#8FA17A" title="sage"></i><i style="background:#4E5B3C" title="moss"></i>
+              <i style="background:#C68A3C" title="amber"></i><i style="background:#A14E2A" title="terracotta"></i>
+            </div>
+            <div class="fila"><span class="et">Noche</span>
+              <i style="background:#05070E" title="midnight"></i><i style="background:#0E1428" title="indigo"></i>
+              <i style="background:#2A3450" title="twilight"></i><i style="background:#ECE3CF" title="silver"></i>
+              <i style="background:#F4ECCF" title="moon"></i><i style="background:#D4A857" title="gold"></i>
+            </div>
+          </div>
+          <p class="specimen">Tipografías: <b>Italiana</b> solo para el logotipo · <b>Cormorant Garamond</b> para títulos y voz editorial · <b>Raleway</b> para todo el cuerpo y la interfaz.</p>
+          <ul class="tags"><li>Design system</li><li>Research de marca</li><li>React</li><li>Maqueta funcional</li></ul>
+        </div>
+      </article>
+
+      <article class="proyecto">
+        <div class="rail">
+          <span class="num">03</span>
+          <span class="estado vivo">En operación</span>
+          <span>Distribuidora de snacks · WhatsApp</span>
+        </div>
+        <div class="cuerpo">
+          <h3>PipeBot</h3>
+          <p>Un agente de ventas por WhatsApp para Papas Pipe. Toma pedidos al por mayor, aplica las reglas del negocio —mínimo 30 paquetes, horario de lunes a viernes, precios fijos— y escala a una persona cuando hace falta.</p>
+          <p>Tres modelos en cadena: si el primero se cae, el pedido no se pierde, lo atiende el siguiente. Para un negocio que vende por WhatsApp, quedarse mudo media hora es perder la venta.</p>
+          <div class="diagrama">
+            <svg viewBox="0 0 720 292" role="img" aria-label="Diagrama: WhatsApp entra por Twilio al backend de Node y Express, que guarda en Supabase y usa Redis para historial. El backend consulta DeepSeek V4 Pro; si falla pasa a Groq LLaMA 3.3 70B y luego a Gemini 2.0 Flash.">
+              <defs>
+                <marker id="f" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0 L8 4 L0 8 z" fill="#3d506e"/>
+                </marker>
+              </defs>
+              <g font-family="Instrument Sans, system-ui, sans-serif" fill="#e8ecf4">
+                <g stroke="#22304a" fill="#0b0f18">
+                  <rect x="4" y="18" width="132" height="46" rx="6"/>
+                  <rect x="180" y="18" width="132" height="46" rx="6"/>
+                  <rect x="356" y="18" width="152" height="46" rx="6"/>
+                  <rect x="552" y="18" width="164" height="46" rx="6"/>
+                  <rect x="150" y="112" width="164" height="42" rx="6"/>
+                </g>
+                <g stroke="#22304a" fill="#0b0f18">
+                  <rect x="392" y="112" width="200" height="42" rx="6"/>
+                  <rect x="392" y="180" width="200" height="42" rx="6"/>
+                  <rect x="392" y="242" width="200" height="42" rx="6"/>
+                </g>
+                <g font-size="13" text-anchor="middle">
+                  <text x="70" y="46">WhatsApp</text>
+                  <text x="246" y="46">Twilio</text>
+                  <text x="432" y="41">Node + Express</text>
+                  <text x="432" y="56" font-size="10.5" fill="#8fa4bd">webhook · orquestador</text>
+                  <text x="634" y="41">Supabase</text>
+                  <text x="634" y="56" font-size="10.5" fill="#8fa4bd">Postgres · Realtime · Storage</text>
+                  <text x="232" y="132">Redis</text>
+                  <text x="232" y="146" font-size="10.5" fill="#8fa4bd">historial · borrador · dedupe</text>
+                  <text x="492" y="132">DeepSeek V4 Pro</text>
+                  <text x="492" y="200">Groq · LLaMA 3.3 70B</text>
+                  <text x="492" y="262">Gemini 2.0 Flash</text>
+                </g>
+                <g stroke="#3d506e" fill="none" marker-end="url(#f)">
+                  <path d="M136 41 H174"/>
+                  <path d="M312 41 H350"/>
+                  <path d="M508 41 H546"/>
+                  <path d="M420 64 V88 H236 V106"/>
+                  <path d="M444 64 V88 H492 V106"/>
+                </g>
+                <g stroke="#4090ff" fill="none" marker-end="url(#f)" stroke-dasharray="4 4">
+                  <path d="M492 154 V174"/>
+                  <path d="M492 222 V236"/>
+                </g>
+                <g font-size="10.5" fill="#4090ff">
+                  <text x="502" y="169">si falla</text>
+                  <text x="502" y="235">si falla</text>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <p class="decision">Lo difícil no fue el bot: fue el panel donde una persona toma la conversación sin que el bot le siga escribiendo encima al cliente. La conversación tiene dueño explícito en la base de datos, y mientras es de la persona, el agente calla.</p>
+          <p class="traspaso"><span class="pill on">bot_active</span> ⇄ <span class="pill hum">human_active</span> — un estado en Postgres decide quién contesta.</p>
+          <ul class="tags"><li>Node y Express</li><li>Twilio</li><li>Supabase</li><li>Redis</li><li>Realtime</li></ul>
+          <!-- Pendiente del usuario: capturas del panel y de una conversación real.
+               Nombres y prioridad en refs/pipebot/CAPTURAS.md. Cuando lleguen, van en una
+               tira <figure> debajo del diagrama, no reemplazándolo: el diagrama explica el
+               sistema y las capturas prueban que existe. -->
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="contacto" class="plano">
+    <div class="dentro">
+      <p class="kicker">Hablemos</p>
+      <h2>Contame qué necesitás y te digo si soy la persona indicada</h2>
+      <p class="bajada">Si no lo soy, también te lo digo. Respondo en el día.</p>
+      <ul class="enlaces">
+        <li><a href="mailto:sebastianmedev@gmail.com?subject=Proyecto%20web">sebastianmedev@gmail.com</a>
+            <button class="copiar" type="button" data-copiar="sebastianmedev@gmail.com">copiar</button></li>
+        <li><a href="https://github.com/Sebastiandevmed" rel="me noopener">github.com/Sebastiandevmed</a></li>
+      </ul>
+      <!-- Pendiente del usuario: LinkedIn, WhatsApp de trabajo y dominio propio.
+           Al llegar entran como <li> aquí y en el JSON-LD sameAs de abajo. -->
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="dentro">
+    <span>Sebastián Escobar · Medellín, Colombia</span>
+    <span>El cuarto de arriba es mi escritorio, modelado y animado para este sitio.</span>
+  </div>
+</footer>
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","name":"Sebastián Escobar",
+ "jobTitle":"Desarrollador web","email":"mailto:sebastianmedev@gmail.com",
+ "address":{"@type":"PostalAddress","addressLocality":"Medellín","addressCountry":"CO"},
+ "sameAs":["https://github.com/Sebastiandevmed"],
+ "knowsAbout":["Shopify","React","TypeScript","Supabase","Node.js","Python"]}
+</script>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script>
+// ---- PLAN B. Va en un script clasico y no dentro del modulo a proposito: si el CDN de three
+// no responde, o el importmap no lo soporta el navegador, el <script type="module"> NUNCA
+// corre — y con la logica ahi dentro la pantalla de carga se quedaba puesta tapando el sitio
+// entero. Aqui se arma pase lo que pase.
+window.__plano = false;
+window.__planPlano = function (motivo) {
+  if (window.__plano) return;
+  window.__plano = motivo || true;
+  clearTimeout(window.__relojPlano);
+  document.body.dataset['3d'] = 'none';
+  const c = document.getElementById('carga');
+  c.classList.add('listo');
+  setTimeout(() => { c.hidden = true; }, 800);
+};
+window.__cancelaPlano = function () { clearTimeout(window.__relojPlano); clearTimeout(window.__relojArranque); };
+// Dos relojes, porque son dos averias distintas y una de las dos se nota enseguida:
+//   arranque  el modulo ni empezo (CDN de three caido, importmap sin soporte). Si en 8 s no
+//             ha dado señales, no va a darlas: mejor la pagina plana que un cargador eterno.
+//   carga     el modulo corre pero el GLB no llega (conexion lenta). 25 s de margen: son 4 MB.
+window.__relojArranque = setTimeout(() => window.__planPlano('sin-modulo'), 8000);
+window.__relojPlano = setTimeout(() => window.__planPlano('timeout'), 25000);
+window.__moduloVivo = function () { clearTimeout(window.__relojArranque); };
+
+  window.__errors = [];
+  const showErr = (m) => window.__errors.push(m);
+  addEventListener('error', (ev) => showErr('error: ' + (ev.message || ev.type)), true);
+  addEventListener('unhandledrejection', (ev) => showErr('unhandled: ' + (ev.reason && ev.reason.message || ev.reason)));
+  const _ce = console.error.bind(console); console.error = (...a) => { showErr('console.error: ' + a.map(String).join(' ')); _ce(...a); };
+  const _cw = console.warn.bind(console); console.warn = (...a) => { showErr('console.warn: ' + a.map(String).join(' ')); _cw(...a); };
+</script>
+<script type="module">
+// El 3D acompana el primer tramo (hero, como trabajo, pantallas) y se retira al entrar a los
+// proyectos, que es el tramo largo de lectura. Se eligio comparando capturas de los tres
+// esquemas posibles; `?modo=fondo|hero` sigue existiendo para volver a comparar sin tocar el
+// codigo, pero el sitio ES el hibrido.
+import { createAvatarScene, hasWebGL } from './lib/scene.js';
+import { createCameraPath, CAMERA_STATES, esMovil } from './lib/camera-path.js';
+
+window.__moduloVivo();   // llego three y el modulo corre: se desarma el reloj de arranque
+
+const Q = new URLSearchParams(location.search);
+const MODO = ['fondo', 'hero', 'hibrido'].includes(Q.get('modo')) ? Q.get('modo') : 'hibrido';
+document.body.dataset.modo = MODO;
+const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// En un telefono no hay raton que mover: la instruccion tiene que hablar de tocar.
+if (matchMedia('(hover: none)').matches) {
+  document.getElementById('pista').innerHTML = '<b>Arrastrá el dedo</b> — él te sigue. Tocalo y se pone los audífonos.';
+}
+
+// Hasta que seccion sigue vivo el 3D. Mas alla, el canvas se retira y el bucle se para.
+const HASTA = { fondo: 'contacto', hero: 'hero', hibrido: 'stack' }[MODO];
+const ORDEN = ['hero', 'sobreMi', 'stack', 'proyectos', 'contacto'];
+const LIMITE = ORDEN.indexOf(HASTA);
+
+const carga = document.getElementById('carga'), cargaTxt = document.getElementById('cargaTxt');
+const barra = document.querySelector('#barra i');
+const puntos = new Map([...document.querySelectorAll('#hilo a')].map(a => [a.hash.slice(1), a]));
+
+let actual = 'hero';
+const marcarPunto = () => { for (const [id, a] of puntos) a.setAttribute('aria-current', String(id === actual)); };
+marcarPunto();
+
+// ---- plan B. Sin WebGL2 (three r170 ya no trae WebGL1) o con el GLB caido, la pagina TIENE
+// que quedar legible. La mecanica vive en el script clasico de arriba (window.__planPlano),
+// que se arma aunque este modulo no llegue a correr nunca.
+const planPlano = window.__planPlano;
+const plan = () => !!window.__plano;
+
+// ?3d=off fuerza el plan B (lo usa tools/landing_probe.mjs para probarlo sin romper WebGL).
+if (!hasWebGL() || Q.get('3d') === 'off') {
+  planPlano(hasWebGL() ? 'forzado' : 'sin-webgl');
+  window.__landing = { modo: MODO, get plano() { return window.__plano; },
+    get seccion() { return actual; }, get tresD() { return document.body.dataset['3d']; },
+    estadoCamara: null, distanciaCamara: 0, camPos: [], status: { loaded: false, env: false, fps: 0 } };
+} else {
+
+const av = createAvatarScene({
+  container: document.getElementById('escena'),
+  query: Q,
+  controls: false,              // la camara la maneja camera-path.js, no el raton
+  autoVibe: !quieto,
+  pointerVibe: true,
+  pointerTarget: document,      // el canvas vive DEBAJO del contenido: el clic llega aqui
+  maxPixelRatio: esMovil() ? 1.5 : 2,
+  onProgress: (f) => { barra.style.width = Math.round(f * 100) + '%'; },
+  onError: () => planPlano('glb-error'),
+  onReady: () => {
+    window.__cancelaPlano();
+    barra.style.width = '100%';
+    cargaTxt.textContent = 'listo';
+    requestAnimationFrame(() => carga.classList.add('listo'));
+    setTimeout(() => { carga.hidden = true; }, 800);
+  },
+});
+
+const path = createCameraPath(av.camera, CAMERA_STATES, {
+  start: 'hero', parallax: quieto ? 0 : 0.12, variant: esMovil() ? 'movil' : null,
+});
+path.snap('hero');
+av.onFrame((dt) => {
+  path.setParallax(av.mouse.x, av.mouse.y);
+  path.update(dt, av.camTarget);
+});
+// Girar el telefono cambia cual es el encuadre correcto.
+addEventListener('resize', () => path.setVariant(esMovil() ? 'movil' : null));
+
+// ---- que seccion manda. Se toma la que ocupa mas parte de la ventana, no "la primera que
+// intersecta": con secciones de una pantalla completa, dos cumplen a la vez a mitad de scroll.
+const visible = new Map();
+const io = new IntersectionObserver((ent) => {
+  if (plan()) return;                     // el 3D se cayo: el canvas ya no manda nada
+  for (const e of ent) visible.set(e.target.id, e.intersectionRatio);
+  let mejor = actual, r = 0;
+  for (const [id, v] of visible) if (v > r) { r = v; mejor = id; }
+  if (mejor === actual) return;
+  actual = mejor;
+  marcarPunto();
+  if (quieto) path.snap(actual); else path.goTo(actual);
+  // entrar a "como trabajo" saluda; en modo reducido no.
+  if (actual === 'sobreMi' && !quieto) av.vibe();
+  const dentro = ORDEN.indexOf(actual) <= LIMITE;
+  document.body.dataset['3d'] = dentro ? 'on' : 'off';
+  if (dentro) av.start(); else setTimeout(() => { if (document.body.dataset['3d'] === 'off') av.stop(); }, 700);
+}, { threshold: [0, .15, .3, .5, .7, .9] });
+for (const id of ORDEN) { const el = document.getElementById(id); if (el) io.observe(el); }
+
+// Contrato con tools/landing_probe.mjs
+window.__landing = {
+  modo: MODO,
+  get plano() { return window.__plano; },
+  get seccion() { return actual; },
+  get estadoCamara() { return path.state; },
+  get distanciaCamara() { return path.distance; },
+  get camPos() { return av.camera.position.toArray(); },
+  get tresD() { return document.body.dataset['3d']; },
+  status: av.status,
+  // Solo para las sondas: probar encuadres sin editar camera-path.js y volver a capturar.
+  // __landing.camara.states.stack.movil = {...}; __landing.camara.snap('stack')
+  camara: path,
+};
+
+}  // fin de la rama con 3D
+
+// ---- lo que funciona igual con y sin 3D
+// En el plan B el hilo de secciones tambien tiene que seguir al scroll.
+if (plan()) {
+  const io2 = new IntersectionObserver((ent) => {
+    let mejor = actual, r = 0; const vis = new Map();
+    for (const e of ent) vis.set(e.target.id, e.intersectionRatio);
+    for (const [id, v] of vis) if (v > r) { r = v; mejor = id; }
+    if (mejor !== actual) { actual = mejor; marcarPunto(); }
+  }, { threshold: [0, .3, .6] });
+  for (const id of ORDEN) { const el = document.getElementById(id); if (el) io2.observe(el); }
+}
+
+for (const b of document.querySelectorAll('.copiar')) {
+  b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copiar); b.textContent = 'copiado'; }
+    catch { b.textContent = 'no se pudo'; }
+    setTimeout(() => { b.textContent = 'copiar'; }, 1800);
+  });
+}
+</script>
+</body></html>

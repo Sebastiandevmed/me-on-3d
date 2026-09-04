@@ -7,6 +7,8 @@ Entregables:
 - `export/avatar.glb` — escena completa con Draco, 7 clips de animación, 47 663 triángulos, **3.81 MiB (3.9 MB en disco)** contra el `BUDGET` de 10 MiB de `export_glb.py`. Casi todo el peso son texturas, todas en JPEG: el atlas del personaje horneado a 4096 (`repack_uvs.py`, `CHAR_QUALITY = 92`), la ventana `medellin` a 1504 px sin reescalar vía `TEX_LIMITS`, el resto a 1024.
 - `export/avatar_uncompressed.glb` — la misma escena sin Draco (depuración).
 - `export/night.hdr` — entorno nocturno 1024×512 para la iluminación.
+- `export/index.html` + `export/lib/` — **la landing de portafolio**: el cuarto acompaña las tres primeras secciones y se retira en los proyectos (ver "La landing").
+- `export/poster.jpg` y `export/og.jpg` — render estático del cuarto (plan B del hero) y tarjeta social, generados con `tools/make_poster.mjs`.
 - `export/preview.html` + `tools/serve_preview.sh` — visor local de referencia (three.js).
 - `blender/*.blend` — archivos fuente (se regeneran con los scripts; no se versionan).
 
@@ -18,8 +20,8 @@ Entregables:
 | `blender/` | `scene.blend` (habitación + escritorio), `character.blend` (personaje rigueado + logo + material limpio + partes faciales + audífonos), `character_anim.blend` (+ animaciones), `avatar.blend` (todo ensamblado). También `landmarks.json` y `headphones.json`, versionados. |
 | `refs/` | Referencias: frames de la cara (`face/`), foto de la moto y estilo (`style/`), logo de la empresa (`logo.png`). |
 | `generated/` | Salidas intermedias (ignorado por git): láminas de Higgsfield, malla Meshy, texturas, renders de aprobación, `credits.log`. |
-| `export/` | Entregables. Los `.glb` están ignorados por git; se regeneran con `export_glb.py`. |
-| `tools/` | `run_blender.sh` (lanzador headless), `glb_inspect.py` (inspección de GLB), `screens/` (texturas de pantalla con Chrome headless), `serve_preview.sh`, `preview_probe.mjs` (sonda headless del visor con CDP). |
+| `export/` | Entregables y **la web**: `index.html`, `lib/`, `poster.jpg`, `og.jpg`, `night.hdr`. Los `.glb` están ignorados por git; se regeneran con `export_glb.py`, así que para publicar hay que copiarlos aparte. |
+| `tools/` | `run_blender.sh` (lanzador headless), `glb_inspect.py` (inspección de GLB), `screens/` (texturas de pantalla con Chrome headless), `serve_preview.sh`, y las sondas headless con CDP: `preview_probe.mjs` (el visor), `landing_probe.mjs` (el sitio), `ink_probe.mjs` (los contornos), `face_shot.mjs` (la cara) y `make_poster.mjs` (genera `poster.jpg` y `og.jpg`). |
 | `docs/` | Spec, plan y `HANDOFF.md` (estado del proyecto y decisiones). |
 
 ## Regenerar todo
@@ -111,6 +113,70 @@ Clips (24 fps), todos empiezan en el frame 1:
 Regla de mezcla: `idle` es la base continua; `typing` y `Blink` se superponen (huesos disjuntos); `vibe` y `lookAround` se reproducen en exclusiva (fundir `idle`/`typing` a 0 y volver); `browup` se superpone a todo. Solo `vibe` y `lookAround` mueven `spine006`, y solo `vibe` mueve `headphones` (lo verifica `export_glb.py`).
 
 Nodos útiles en el GLB: `spine006` (cabeza, para el seguimiento del cursor), `spine003` (pecho, para acompañar el giro), `headphones` (hueso de los audífonos; si se gira la cabeza a mano hay que cancelar el giro aquí para que no se despeguen), `screen_left`, `screen_center`, `screen_right`, `screen_laptop` (pantallas: materiales con `emissiveTexture`, encenderlas subiendo `emissiveIntensity`), `rgb_bar_L`, `rgb_bar_R` (barras de luz, cambiar `emissive`), `moto_mini`, `seat_anchor`, `moto_anchor`, la habitación (`wall_back_L`, `wall_back_R`, `wall_back_top`, `wall_back_bottom`, `wall_left`, `wall_right`, `ceiling`, `floor`) y la ventana (`window_far`, `window_near`, `window_head`, `window_post_L/R`). El material `Window_Far` trae `emissiveTexture` (la ciudad de noche): no tratarlo como pantalla. El material `Character` YA NO trae emisión (`fix_character_material.py` la apaga), así que la piel y la ropa dependen solo de las luces de la escena.
+
+## La landing
+
+`export/index.html` es el sitio: portada, "Cómo trabajo", "Lo que hay en las pantallas", los tres
+trabajos y contacto. Se sirve con `tools/serve_preview.sh` y se abre en <http://localhost:8765/>.
+
+**Modo híbrido.** El 3D vive en las tres primeras secciones y se retira al entrar a los proyectos,
+donde `av.stop()` para el bucle de dibujo (el `opacity` solo lo esconde; la batería se recupera
+parando). Se eligió comparando capturas de los tres esquemas posibles: con el cuarto de fondo
+permanente el texto peleaba con el personaje justo en el tramo más largo de lectura, y no se ganaba
+nada, porque el encuadre que impresiona —el de sobre el hombro, con el código en los monitores— el
+híbrido lo conserva entero. `?modo=fondo` y `?modo=hero` siguen existiendo para volver a comparar.
+
+Las secciones sin 3D **cambian de maqueta**, no solo de fondo: pasan de la columna derecha (que
+existe porque `camera-path.js` manda al personaje al tercio izquierdo) a una rejilla de ancho
+completo. Sin eso quedaba media pantalla de negro vacío.
+
+| Archivo | Qué es |
+|---|---|
+| `export/index.html` | El sitio entero: maqueta, contenido y el guion de secciones. |
+| `export/lib/scene.js` | El motor (escena, luces, GLB, clips, seguimiento de cursor, bucle). Lo comparten la landing y `preview.html`. |
+| `export/lib/camera-path.js` | Estados de cámara con nombre, interpolación suavizada y **una variante `movil` por estado**: en vertical el `fov` es vertical y con los números de escritorio el personaje sale cortado. |
+| `export/poster.jpg` | El cuarto sin texto. Es el plan B del hero. |
+| `export/og.jpg` | Tarjeta social (render + nombre en una capa aparte). |
+
+`node tools/make_poster.mjs` regenera esas dos imágenes **desde la escena en vivo**, así que
+cualquier cambio de luces, cámara o personaje se propaga y no queda una captura vieja mintiendo en
+el preview de WhatsApp.
+
+### Cuando no hay escena
+
+Tres averías distintas dejan al visitante sin 3D, y las tres tienen que dejar un sitio legible en
+vez de la pantalla de carga tapándolo todo:
+
+| Avería | Quién la detecta | En cuánto |
+|---|---|---|
+| Sin WebGL2 (three r170 ya no trae WebGL1) | `hasWebGL()` antes de construir nada | inmediato |
+| El CDN de three no responde, o el navegador no soporta importmap | script **clásico** en la página: el `<script type="module">` ni llega a correr | 8 s |
+| El GLB no llega o llega roto | `onError` del loader, y un reloj de respaldo | inmediato / 25 s |
+
+Por eso el plan B (`window.__planPlano`) **no vive dentro del módulo**. En los tres casos el hero
+cae a `poster.jpg`, el texto manda y el resto del sitio funciona igual.
+
+### Verificación
+
+```bash
+node tools/landing_probe.mjs     # LANDING OK
+```
+
+Recorre las cinco secciones en escritorio y en vertical, y afirma: que la cámara viaja de verdad,
+que el 3D se apaga donde el modo dice, que el hilo de secciones señala la sección correcta, que no
+hay desborde horizontal a 375 px, que la pantalla de carga se quita sola, que `avatar.glb` se pide
+**una** vez (el `preload` del `<head>` podría duplicar los 4 MB si el `as` o el `crossorigin` no
+casaran con `GLTFLoader`), y que los dos planes B —sin WebGL y con jsdelivr bloqueado— dejan la
+página legible. Deja las capturas en `generated/renders/landing_*.png`.
+
+### Pendiente (necesita material del usuario)
+
+- **Capturas de PipeBot**: el panel y una conversación real. Nombres y prioridad en
+  `refs/pipebot/CAPTURAS.md`. El caso ya se sostiene sin ellas —lleva el diagrama del sistema— pero
+  las capturas son lo que prueba que existe. Van en una tira debajo del diagrama, no en su lugar.
+- **LinkedIn, WhatsApp de trabajo y dominio propio**: entran en la lista de contacto y en el
+  `sameAs` del JSON-LD. Hoy solo hay correo y GitHub, y `<link rel="canonical">` apunta a un
+  dominio que todavía no existe.
 
 ## Usar el GLB en three.js
 

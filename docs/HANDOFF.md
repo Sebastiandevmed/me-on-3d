@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-03 (sesión 6, EN CURSO: spec nueva `2026-09-03-avatar-pro-landing-design.md` — cel-shading + landing de portafolio, 4 fases. Fase 1 (look cel) hecha y esperando aprobación del usuario, ver "Sesión 6". Sesión 5: cejas duplicadas en browup, rendijas geométricas entre islas, retoque de textura y seguimiento de cursor suave, ver "Sesión 5". Sesión 4: barba estirada al seguir el cursor + reempaquetado UV, normales alisadas y diagnóstico de las vetas, ver "Sesión 4". Sesión 3, plan de pulido: tareas 15-21 completas sobre las 14 de la sesión 2, revisión final de rama hecha y ola de correcciones aplicada. El usuario YA aprobó las capturas visuales de la sesión 3. Pendiente: URL del repo del portafolio, decisión de archivado, integrar `avatar-3d` en `main` y la prueba del visor en ventana real)
+**Última actualización:** 2026-09-04 (sesión 9: las rayas negras intermitentes las pintaba el término de normales del contorno sobre el ruido de la malla de Meshy; arreglado con sensibilidad a tinta POR OBJETO en la alfa del buffer de normales + corrección de escorzo. Quedan motas horneadas en el atlas, ver "Sesión 9". Antes — sesión 8: la CARA. Tres bugs de textura encontrados y arreglados —rellenábamos la barba de Meshy sobre una premisa falsa, un bug de espacio de color que ponía el labio rojo, y las canaletas del atlas sin re-dilatar tras el repintado. Todos los checks pasan y el GLB está re-exportado; ver "Sesión 8". LA LANDING SIGUE SIN EMPEZAR: solo existe export/lib/camera-path.js. Pendiente del usuario: capturas de PipeBot (refs/pipebot/CAPTURAS.md) y links de contacto)
 
 ## Cómo retomar
 
@@ -189,3 +189,428 @@ Tres pedidos del usuario tras ver la fase 1. Todo esto SÍ toca el GLB, a difere
 **Estado tras la regeneración completa:** todos los checks OK, `CHECK_RIG OK` 39 237 tris, `CHECK_ANIM OK`, `INTERSECCIONES 4`, `GLB OK 3908 KB / 48 275 tris / 7 clips`, `PROBE OK` sin errores. Comparativas: `generated/renders/cara_ab.png`, `logo_ab.png`, `manos_ab.png`.
 
 **Pendiente de la sesión 6:** aprobación de las fases 1 y 1b; luego fases 2-4. El usuario debe entregar los 3-4 proyectos reales (nombre, línea, link) y los links de contacto para el bloque `DATA` de la landing.
+
+## Sesión 7 (2026-09-04) — barba, cejas y colocación de la escena
+
+Pedidos del usuario, en orden: (1) "la barba y cejas quedaron mal diseñadas, arréglalas";
+(2) las pantallas se bugean / aparecen lejos del escritorio, definir el teclado, logo al monitor
+central, habitación más pequeña, reflejo de vidrio, soporte para las barras RGB; (3) empezar la
+landing de portafolio con proyectos reales.
+
+### Barba — el bug que causaba el "pasamontañas"
+
+`face_features.py` cerraba la barba sobre una **caja** `|x| <= 0.065` y `z <= ojos-0.055`. Esa caja
+mide 13 cm de ancho (la cara llega a 10.5) y su techo cae a media nariz, así que barría también
+las mejillas. Como el script tiñe TODA la piel que cae dentro, el resultado fue teñir la mitad
+inferior entera de la cara — en cel-shading colapsa a negro plano — y de paso **destruyó la línea
+de mejilla que Meshy sí había pintado bien** (alta en la patilla, baja hacia la comisura, igual
+que en `refs/face/contact_sheet.jpg`).
+
+Correcciones:
+- Zona = **elipse** (`CHIN_Z/RX/RZ`) ajustada a la mancha real de Meshy, medida con el mapa de
+  ocupación piel/pelo que ahora imprime `--probe`. Relleno: 30 000+ téxeles → ~8 700.
+- **Difuminado hacia AFUERA** de la elipse. Hacia adentro dejaba los últimos 8 mm a medio teñir
+  justo donde acaba la mancha, y salía un halo color piel trazando el contorno de la boca.
+  Peso medio del relleno: 0.74 → 0.96.
+- Relleno de `is_skin` a **`~is_hair`**: entre `HAIR_LUM` (0.50) y `SKIN_LUM` (0.55) hay una
+  tierra de nadie donde caen los trazos con que Meshy dibujó el contorno del bigote, la perilla
+  y la muesca del mentón. No se teñían y quedaban como garabatos claros sobre la barba.
+- **`FILL_MAX`**: la versión vieja tenía mínimo de téxeles pero no máximo, y por eso el bug pasó
+  sin protestar. Ahora falla si el relleno se desborda.
+- Labios y línea de boca en **sRGB absoluto**, no como factor sobre la piel de alrededor: ese
+  factor es lo que produjo el color caramelo de la sesión 6 y la mancha pálida al corregirlo.
+  Se añadió `MOUTH_SRGB`, la línea de abertura — sin ella los dos labios son una sola mancha.
+
+### Cejas
+
+`make_brow()` usaba `taper = sin(pi*t)**0.5`, que vale ~1 en casi todo el recorrido, con
+`BROW_ARCH` de 2.2 mm sobre 55 mm: salía una barra recta de altura constante y puntas romas.
+Ahora `brow_profile(t)` da arco asimétrico (pico a `BROW_PEAK` = 0.62 hacia la sien, +4.4 mm),
+cola que cae 3.5 mm por debajo de la cabeza y grosor 60 % → 91 % → 0 (termina en punta).
+
+### Colocación de la escena — `monitor_L/R` a 87 cm de su base
+
+`common.box()` horneaba la escala pero quien quería una caja girada ponía `ob.rotation_euler`
+DESPUÉS de la llamada. La localización sí se horneaba, la rotación no: quedaba viva en el objeto
+y se aplicaba alrededor del ORIGEN DEL MUNDO sobre geometría que ya está a 0.6-1.5 m de él.
+Medido en el GLB: `monitor_L`/`monitor_R` a **87 cm**, `controller` a **35 cm**, `laptop_lid` a
+**29 cm**; las cajas sin rotación caían bien, y por eso el fallo parecía aleatorio.
+`check_scene.py` incluso documentaba la creencia equivocada ("transform_apply aplica los 3").
+
+Corregido en `common.box()` (acepta `rotation=` y lo hornea) + **`checks/check_scene_placement.py`**
+nuevo: falla si alguna malla conserva rotación viva, si un monitor se separa >5 cm de su base o
+si el tope del teclado se mueve de `DESK_Z + 0.030`.
+
+### Resto de la escena
+
+- Logo al monitor **central** (el más grande y el que queda de frente al rodear el escritorio).
+- `laptop_keys`: 72 teclas + trackpad. La base baja 1.5 mm y las teclas rellenan ese 1.5 mm, así
+  que el tope vuelve a caer en `DESK_Z + 0.030` y **no hay que recalibrar las manos**.
+- Habitación 5.6×2.8 m → **4.1×2.5**, pared trasera -1.7 → -1.45, ventana reescalada a 16:9 y
+  repisa de x=2.0 a **x=1.5**.
+- Trípodes negros (poste + buje + 3 patas) bajo cada barra RGB.
+- Vidrio: plano `window_glass` + `export/lib/glass.js`, destello aditivo (2 bandas diagonales +
+  fresnel) en vez de reflexión real. En un look de bandas una reflexión planar cuesta una pasada
+  entera y se ve sucia; en ilustración el vidrio se lee por el brillo. `?glass=0` lo apaga.
+
+### Decisiones del usuario en esta sesión
+
+- Barba **como en las fotos** (línea de mejilla baja, pómulo despejado, labios visibles). Esto
+  ANULA el "barba completa cerrada" de la sesión 6.
+- Monitores: **la cámara rodea** hasta ver las pantallas; no se giran hacia la sala.
+- Orden de trabajo: **primero la cara**, luego la escena, luego la web.
+
+### Landing de portafolio — contenido levantado del disco
+
+Ver la memoria `portfolio-content.md`. Los 3 proyectos son Amaranthus Gold (producción),
+Holistic Eco·Hotel (propuesta) y PipeBot (bot de WhatsApp + dashboard).
+**BLOQUEANTE:** el repo de PipeBot no tiene NINGUNA captura; hay que levantar la app y tomarlas.
+De contacto solo hay `sebastianmedev@gmail.com` y `github.com/Sebastiandevmed`.
+`~/Desktop/Portfolio` está vacía: la landing se construye desde cero.
+
+## Sesión 8 (2026-09-04) — la cara: por qué se veía como un pasamontañas
+
+El usuario, viendo el visor: "la boca y barba siguen viéndose super raro, adicional que tiene
+como líneas color piel que hace que se vea aún más desorganizado". Eran **tres bugs distintos**,
+y los tres estaban en el pipeline de TEXTURA, no en el cel-shading (se comprobó con `?mat=basic`,
+que dibuja la textura sin luz ni bandas: los defectos ya se veían ahí).
+
+### 1. Rellenábamos nosotros la barba sobre una premisa falsa
+
+`face_features.py` cerraba la barba sobre el mentón porque su docstring afirmaba que "Meshy dejó
+todo el mentón y la boca como una sola mancha de piel plana". **Es falso.** Medido con el modo
+nuevo `--probe --tex generated/character_texture_repacked.png`, o sea sobre lo que pintó Meshy
+antes de tocar nada:
+
+```
+ojos-58mm  |............#####...######...........|   bigote
+ojos-86mm  |#######.......................#######|   barba solo en la mandíbula
+ojos-106mm |#########.......#####........########|   perilla
+```
+
+Eso es exactamente la barba de `refs/face/contact_sheet.jpg`. El "hueco de piel" del centro no
+era un defecto: era la boca y el mentón. Al rellenarlo con color de barba, en cel-shading colapsa
+a un plano negro (pasamontañas) y la "boca" pasaba a ser la ranura que el relleno dejaba sin
+cubrir — de ahí los garabatos.
+
+**Arreglo:** `face_features.py` ya NO rellena nada. Solo dibuja los labios (dos medias elipses
+asimétricas, la de abajo más llena) y la línea de abertura, y solo sobre piel. Se borraron
+`CHIN_*`, `BEARD_*`, `FILL_MAX` y `GRAIN`. Guardas nuevas `LIP_MIN`/`LIP_MAX`.
+
+### 2. Bug de espacio de color: el labio salía rojo de lápiz labial
+
+El comentario "trampa 2" del script afirmaba que `image.pixels` devuelve LINEAR. **También es
+falso para esta imagen.** Medido: el PNG guarda la piel de Meshy como (236, 158, 133), que es el
+`skin_srgb` del landmark → `pixels` entrega sRGB. Consecuencias:
+
+- `srgb = to_srgb(rgb)` es una conversión de MÁS. Los umbrales de clasificación (`SKIN_LUM`,
+  `HAIR_LUM`, `SKIN_RED`) están calibrados contra ese espacio doblemente convertido y funcionan:
+  **no se tocan**.
+- Pero al ESCRIBIR un color, `to_linear()` sobraba: el labio acababa en (146, 47, 39) en vez de
+  en (199, 120, 110). Se comprobó contando téxeles en el atlas: 4487 cerca del valor erróneo
+  contra 264 cerca del correcto.
+
+### 3. Las líneas color piel: canaletas rancias
+
+`fix_character_material.py` dilata el color de cada isla sobre las canaletas del atlas. Pero
+`texture_touchup.py` y `face_features.py` corren DESPUÉS y pintan **por téxel rasterizando
+triángulos**, así que solo tocan lo que está DENTRO de una isla. Las canaletas se quedaban con el
+color de antes del repintado: cada isla que se oscurecía quedaba rodeada de un anillo de piel.
+
+En pantalla la cara se ve AMPLIADA (≈0.5 mm por téxel, cabeza de ~600 px), así que el muestreo es
+de MAGNIFICACIÓN — por eso `?mat=nomip` nunca cambió nada — y el filtro bilineal convierte ese
+anillo de 1 téxel en una raya de 2-4 px.
+
+Medido sobre los 335 622 bordes isla→canaleta del atlas: saltos de color >80/255 pasan de **3085
+a 106** al re-dilatar.
+
+**Arreglo:** `blender/scripts/redilate_texture.py` (nuevo), SIEMPRE el último retoque de textura;
+ya está en `tools/rebuild_character.sh` detrás de `face_features`. Reusa `uv_mask()` y
+`dilate_colors()` de `fix_character_material.py` y replica también su relleno lejano con
+`dark_mean` — sin eso el color de isla se cuela más allá del alcance de `PAD` y
+`check_character_material.py` falla con `skin_frac_far`.
+
+### Otros cambios
+
+- `face_features.py --tex <ruta>`: en modo lectura, mide otra etapa de la cadena. Es lo que
+  permitió separar "lo pintó Meshy" de "lo pintamos nosotros". Repunta también el nodo del
+  material o el render del probe saldría con la textura vieja mientras los números salen de la nueva.
+- `preview.html ?mat=basic`: dibuja el atlas sin luz ni bandas. Es el único modo que separa
+  "la textura está mal pintada" de "el cel-shading la está aplastando". **Empezar siempre por ahí.**
+- `checks/check_scene_placement.py`: daba falso positivo con las candongas y los audífonos, que
+  llevan rotación viva a propósito porque cuelgan de un hueso. Ahora salta los objetos con padre;
+  el bug que motivó el check (rotación sin hornear aplicada alrededor del origen del mundo) solo
+  le pasa a objetos sueltos.
+
+### Callejón sin salida, para no repetirlo
+
+Se intentó comparar etapas de textura con un `?tex=archivo.png` en el visor y con un
+rasterizador de UV propio en Python. **Ninguno de los dos funcionó** (confeti de islas en las dos
+orientaciones de `flipY`, y una cobertura de 0.645 contra el 0.365 real). Se quitaron los dos.
+La textura se mide en Blender con `uv_mask()`, o en el PNG con PIL contra
+`generated/character_uv_mask.png`; el LOOK se juzga con `tools/face_shot.mjs` sobre el GLB real.
+
+### Verificación
+
+`CHECK_RIG OK` 39 365 tris · `CHECK_ANIM OK` · `CHECK_FACE_EXPORT OK` ·
+`CHECK_CHARACTER_MATERIAL OK` (skin_frac_far 0.0) · `CHECK_SCENE_PLACEMENT OK` ·
+`GLB OK 3852 KB / 49 501 tris / 7 clips` · `PROBE OK errors []` · `FACE OK errores []`.
+Comparativas: `generated/renders/boca_ab_sesion8.png`, `cara_cel.png`, `preview_shot.png`.
+
+### Estado de la landing
+
+**No empezada.** Solo existe `export/lib/camera-path.js` (estados de cámara con nombre e
+interpolación suavizada, sin usar todavía). Faltan la fase 2 (sacar el motor de `preview.html` a
+`lib/scene.js`) y la fase 3 (`index.html`). Contenido y ángulos de los 3 proyectos: memoria
+`portfolio-content.md`. Bloqueantes del usuario: capturas de PipeBot (lista en
+`refs/pipebot/CAPTURAS.md`) y links de contacto más allá de correo y GitHub.
+
+## Sesión 9 (2026-09-04) — las rayas negras que aparecían y desaparecían al moverse
+
+**Reporte:** "al moverse se crean pequeñas líneas y rayas negras, luego desaparecen"; y pedido de
+"un acabado más definido y sin tantos rayones abstractos al resto del avatar".
+
+### Diagnóstico (lo que descartó cada medida)
+
+Sonda nueva `tools/ink_probe.mjs` (primer plano de la cara en 4 poses del cursor + capturas) y una
+medida de parpadeo por píxel. Resultado del ablation:
+
+| variante | qué cambia |
+|---|---|
+| `?shadow=off` | **nada** → no era acné de sombras, pese a ser el sospechoso obvio |
+| `?bloom=0` | **nada** |
+| `?mat=basic` | limpio, pero también apaga la luz: no concluye por sí solo |
+| `?outline=0` | **los rayones desaparecen por completo**, con el mismo toon y la misma textura |
+
+O sea: **los pintaba el término de NORMALES del pase de contorno**, entintando el ruido de la malla
+de Meshy. Parpadeaban porque `smoothstep(b, b*2)` es casi un escalón: al animar, cada píxel dudoso
+lo cruzaba en un frame y volvía en el siguiente.
+
+### Arreglo (`export/lib/postfx.js`, `export/preview.html`)
+
+Un umbral global no podía ganar: con `nbias` 0.8 el personaje salía rayado y con 2.0 el cuarto
+perdía los pliegues. El umbral ahora se modula por dos factores:
+
+1. **Sensibilidad a tinta por objeto.** El pre-pase ya no usa `scene.overrideMaterial` (es UN
+   material para toda la escena) sino un `MeshNormalMaterial` por valor, intercambiado malla a
+   malla. Su `opacity` viaja en la **alfa del buffer de normales** — three deja la mezcla apagada
+   en materiales no `transparent`, así que llega intacta. `Body` y `Mesh_0` (las dos mallas de
+   Meshy) van a `0.2`; el cuarto, cajas de Blender con normales limpias, se queda en 1.
+2. **Corrección de escorzo** (`facing = |nc.z|`, o sea |N·V|): en escorzo la normal gira muy rápido
+   de un píxel al siguiente aunque la superficie sea lisa. Se aplica a los dos términos — también
+   quita las falsas siluetas del escritorio y el suelo vistos de canto.
+
+Además: rampa del `smoothstep` de 2.0 a **2.8** (el píxel dudoso se desvanece en vez de encenderse
+de golpe) y `LinearFilter` en el buffer de normales (promedia 4 téxeles: mata el ruido de un píxel
+sin tocar los pliegues, que ocupan varios). La `DepthTexture` sigue en `Nearest`: `DEPTH_COMPONENT24`
+no es filtrable en WebGL2.
+
+Todo sigue siendo ajustable por query: `?isens=` (1 = comportamiento anterior), `?oramp=`, `?nbias=`.
+
+### Lo que NO se arregló, y por qué
+
+Quedan **motas oscuras sueltas** en la ceja, la sien y el mentón. Se ven **también con
+`?outline=0`**: están horneadas en el atlas, no las dibuja el sombreado. No son fuga de canaleta
+(el margen es `MARGIN_PX 8` a 4096, muy fuera del alcance del filtro bilineal): son téxeles del
+bake original de Meshy o del traspaso al UV reempaquetado. Arreglarlo toca `repack_uvs.py` y
+obliga a un `tools/rebuild_character.sh` completo — trabajo aparte, no empezado.
+
+### Trampa de medición (para no repetirla)
+
+`__inkFrac()` **no** sirve para juzgar este arreglo: mide área de trazo y está dominada por los
+contornos legítimos, así que da 2.16 % con `isens=0.2` y 2.16 % con `isens=1` mientras las
+capturas muestran una diferencia clara. Contar píxeles que oscilan tampoco sirve: al girar la
+cabeza el detalle de la textura barre los píxeles y satura la medida. **Aquí manda la comparación
+visual de `generated/renders/ink_*.png` a la misma pose.**
+
+### Verificación
+
+`PROBE OK errors []` a 60 fps, 5 pases del composer · `INK OK` en las 3 variantes.
+Comparativas: `generated/renders/ink_base_p*.png` contra `ink_isens_1_p*.png` (antes) y
+`ink_outline_0_p*.png` (lo que no pinta el contorno).
+
+## Sesión 9 (cont.) — las motas de la textura: DOS INTENTOS FALLIDOS, no repetirlos
+
+Tras arreglar el contorno quedaban motas oscuras en ceja, sien y mentón. **Siguen ahí.** Lo que sí
+quedó establecido, y no hay que volver a comprobar:
+
+- **Están horneadas en el atlas.** Se ven igual con `?outline=0` y con `?mat=basic`. No son
+  sombreado, ni sombras, ni bloom, ni el contorno.
+
+### Intento 1 — dilatar el atlas de origen antes del horneado del repack (FALLÓ)
+
+Hipótesis: `repack_uvs.py` hornea desde `character_texture_logo.png`, el atlas crudo de Meshy con
+las canaletas sin rellenar e islas a 2-4 px, y lo muestrea bilineal → el filtro cruza a la isla
+vecina y se trae el negro del hoodie sobre la piel.
+
+Se implementó (`dilate_colors` ahora es ortogonal-primero en vez de media de los 8 vecinos, y
+`repack_uvs.py` dilata el atlas de origen antes de hornear) y se reconstruyó el personaje entero.
+**La cara sale idéntica.** Los cambios se conservan porque el sangrado que evitan es real y barato,
+pero no eran la causa.
+
+**La trampa que llevó a esa hipótesis falsa:** se contaron "téxeles mucho más oscuros que su
+vecindario" sobre el atlas — salieron 2670, con la mitad pegados al borde de isla, lo que parecía
+prueba estadística. Al recortar y ampliar esas zonas, la mayoría eran **pestañas, el iris y el logo
+del pecho**. Detalle legítimo. Ninguna medida sobre la textura vale sin mirar el recorte ampliado.
+
+### Intento 2 — quitar manchas pequeñas sobre la piel (FALLÓ, no se llegó a integrar)
+
+Filtro de componentes conexas: candidatos = téxeles rodeados de piel y mucho más oscuros que ella;
+se quitan las componentes de área ≤ 60 y se conservan las grandes (ojos, cejas, barba). Se hizo la
+vista previa en numpy y **se descartó al verla**: lo marcado bordeaba el ojo, la ceja y el labio. El
+antialias del borde de cada rasgo se parte en componentes pequeñas, así que el filtro erosiona los
+rasgos en vez de limpiar motas.
+
+### Qué son en realidad, y la opción recomendada
+
+No son manchas sueltas sobre piel lisa: son los **bordes piel↔gorra / piel↔barba / piel↔pelo**,
+dentados a escala de téxel. La cabeza ocupa poca área del atlas (`REPACK escala lineal 0.753`: el
+reempaquetado hasta PIERDE resolución) y en pantalla se magnifica ~8× (≈0.5 mm por téxel con la
+cabeza a ~600 px), así que un borde irregular de 1-2 téxeles se lee como rayón.
+
+**Opción recomendada, no ejecutada (pendiente de decisión):** dar más área de atlas a la cabeza.
+Hoy `repack_uvs.py` empaqueta con densidad uniforme (`smart_project(..., area_weight=0.0)`). Si las
+islas de la cabeza se escalan 2-3× antes de empaquetar, el defecto se reduce en la misma proporción
+y además la cara gana definición de verdad. Es un cambio en la cadena de UV + reconstrucción
+completa. Descartada la alternativa de repintar la cara a mano: `face_features.py` ya hace eso para
+barba y labios y es donde más se ha peleado.
+
+## Sesión 9 (cont.) — fase 2 y prototipo de la landing
+
+**Fase 2 hecha.** El motor salió de `preview.html` a `export/lib/scene.js` —
+`createAvatarScene(opts)` con escena, luces, GLB, mezcla de clips, seguimiento de cursor y bucle.
+`preview.html` queda como arnés delgado (panel de estado, botones de clip y las variantes `?mat=`).
+`tools/preview_probe.mjs` pasa sin tocarse: el contrato `window.__status / __view / __vibe /
+__inkFrac` se conserva. Opciones nuevas para la landing: `controls:false` (la cámara la mueve quien
+llama), `onFrame(cb)`, `onProgress`, `onReady`, `maxPixelRatio`, `start()` / `stop()`.
+
+**Prototipo de la landing.** `export/index.html`, un solo archivo con las 5 secciones y contenido
+real de los 3 proyectos, con `?modo=` para comparar los tres esquemas de presencia del 3D en vivo:
+
+| `?modo=` | el 3D vive hasta | para qué |
+|---|---|---|
+| `fondo` (por omisión) | `contacto` | lienzo fijo detrás de todo, la cámara viaja por sección |
+| `hero` | `hero` | solo la primera pantalla, el resto es web plana |
+| `hibrido` | `stack` | 3D en hero/sobre mí/stack, se retira en proyectos |
+
+Fuera del tramo con 3D no basta con `opacity`: se llama `av.stop()`, que es donde se recupera
+batería de verdad.
+
+Diseño: paleta sacada de las luces de la propia escena (`--noche` = `scene.background`, `--tinta` =
+el color del contorno, `--neon` = las barras RGB, `--ambar` = la luz del techo), Bricolage Grotesque
++ Instrument Sans, columna de texto a la DERECHA porque `camera-path.js` manda al personaje al
+tercio izquierdo. Los 3 proyectos no son 3 tarjetas iguales porque no son 3 cosas iguales.
+
+**Sonda nueva `tools/landing_probe.mjs`**: recorre las 5 secciones en los 3 modos, afirma que la
+cámara viaja, que el 3D se apaga donde el modo dice, que no hay desborde horizontal a 375 px y que
+no hay errores de consola. `LANDING OK` en los tres, 54-60 fps. Ya cazó dos bugs reales: 356 px de
+desborde por un velo con `inset` negativo en `vw`, y el estado de cámara `proyectos` de
+`camera-path.js`, que estaba en `x = 2.35` — **fuera de la pared derecha del cuarto**, y dejaba la
+sección en negro. Se corrigió eligiendo el encuadre con capturas.
+
+**Decisión pendiente del usuario:** cuál de los tres modos. La comparación que importa es
+`landing_fondo_proyectos.png` contra `landing_hibrido_proyectos.png`.
+
+## Sesión 10 (2026-09-04) — híbrido elegido, y la landing terminada
+
+**Decisión del usuario:** *"híbrido entonces, crea todo, no estaré, así que haz todo lo que más
+puedas"*. Se cierra la comparación de los tres esquemas de presencia del 3D y `export/index.html`
+deja de ser un prototipo comparador: **es el sitio**. `?modo=fondo` y `?modo=hero` quedan como
+escape para volver a comparar sin tocar el código.
+
+### Lo que el prototipo escondía y hubo que arreglar
+
+Las capturas del prototipo se veían bien porque solo se miraba el tramo CON 3D. Al fijar el
+híbrido salieron cuatro problemas reales, todos de la mitad que el prototipo no ejercitaba:
+
+1. **Media pantalla de negro en los proyectos.** La columna de texto vive a la derecha porque
+   `camera-path.js` manda al personaje al tercio izquierdo. Al apagarse el 3D esa columna se
+   quedaba donde estaba, con la mitad izquierda vacía. La maqueta ahora es **por sección**
+   (`.escena` contra `.plano`), no por el estado global del canvas: las secciones sin 3D son de
+   ancho completo y traen su propio fondo, que además tapa el fundido del canvas al retirarse.
+2. **El encuadre vertical era el de escritorio.** El `fov` de three es VERTICAL: a 375 × 812
+   (aspecto 0.46 contra 1.6) el encuadre horizontal se derrumba y el personaje salía cortado y
+   pegado al borde. Cada estado de `CAMERA_STATES` lleva ahora una variante `movil` con más
+   ángulo y el punto de mira más bajo — mirar más abajo **sube** al personaje en el cuadro, que
+   es donde tiene que estar porque el texto ocupa la mitad de abajo. `createCameraPath(...,
+   {variant})` y `path.setVariant()` en el `resize` (girar el teléfono cambia cuál es el correcto).
+   El de `stack` se eligió barriendo cuatro candidatos con capturas, no a ojo: el primero dejaba
+   la cabeza gigante a la izquierda y los monitores —que son el punto de esa sección— en negro.
+3. **"Hacé clic y se pone los audífonos" era mentira.** `pointerVibe` escuchaba en
+   `renderer.domElement`, pero en la landing el canvas vive DEBAJO del contenido (`main` con
+   `z-index:1`) y nunca recibía el clic. Nueva opción `pointerTarget`; la landing pasa `document`
+   y el propio manejador ignora los clics que caen sobre `a`, `button`, `input` o `textarea`.
+4. **El seguimiento de cursor no existía en móvil.** `scene.js` escuchaba `mousemove`. Ahora
+   escucha `pointermove`, que un ratón dispara igual y un dedo también. Las sondas que simulaban
+   el movimiento con `new MouseEvent('mousemove')` se actualizaron a `PointerEvent`.
+
+### El plan B, y por qué NO puede vivir dentro del módulo
+
+Lo cazó una captura: con el CDN de jsdelivr lento, la página se quedaba con la pantalla de carga
+puesta **tapando el sitio entero**. El respaldo por temporizador estaba dentro del
+`<script type="module">`… que en esa avería no llega a correr nunca.
+
+`window.__planPlano` vive ahora en un script **clásico** y se arma pase lo que pase. Tres averías,
+tres detecciones:
+
+| Avería | Quién la detecta | En cuánto |
+|---|---|---|
+| Sin WebGL2 (three r170 no trae WebGL1) | `hasWebGL()` antes de construir el renderer | inmediato |
+| CDN de three caído / sin importmap | reloj de arranque del script clásico; el módulo lo desarma con `window.__moduloVivo()` al correr | 8 s |
+| El GLB no llega o llega roto | `onError` del loader, más un reloj de respaldo | inmediato / 25 s |
+
+En los tres el hero cae a `poster.jpg` y el texto manda.
+
+**Trampa de CSS, para no repetirla.** El velo del hero en plan B se pintaba con `z-index:-1` y
+**no se veía**: el contexto de apilado lo crea `<main>`, no la sección, así que un descendiente de
+z negativo se pinta ANTES que el fondo de la propia sección — es decir, la imagen que venía a
+oscurecer lo tapaba a él. El velo va en `z-index:0` y `.col` sube a `z-index:1`. (El velo de las
+secciones CON 3D sí puede quedarse en `-1`: lo que tiene detrás es el canvas, que está fuera de
+`main`.)
+
+### Contenido: cada proyecto con la pieza que lo explica
+
+El material visual de PipeBot sigue sin llegar, así que el caso se armó **sin depender de él**: un
+diagrama SVG del sistema real (WhatsApp → Twilio → Node/Express → Supabase, con Redis al lado y la
+cadena DeepSeek V4 Pro → Groq LLaMA 3.3 70B → Gemini 2.0 Flash con sus saltos de respaldo) y el par
+`bot_active ⇄ human_active`, que es la decisión de diseño que de verdad costó. Amaranthus lleva las
+dos barras de peso de JavaScript a escala real (460 KB contra 12 KB: la desproporción ES el
+argumento) y Holistic, la paleta día/noche y las tres familias tipográficas que se entregaron.
+Todos los datos se verificaron contra los repos en disco — el README de PipeBot dice "Groq →
+Gemini", que está **desactualizado**; el código (`backend/services/llm.js`) tiene los tres.
+
+Las notas internas (`.falta`) que el prototipo mostraba al visitante salieron de la página y
+quedaron como comentarios HTML en el sitio donde va el material cuando llegue.
+
+### Otros cambios
+
+- **`?v=<ahora>` ya no se manda en la landing.** Rompía el caché de 4 MB en cada visita. Es una
+  opción (`bustCache`) que solo usa `preview.html`, que es donde el GLB se regenera cada rato.
+- **`preload` del GLB por script**, no como `<link>` fijo: adelanta la descarga al parseo del HTML
+  en vez de esperar a que resuelvan el módulo y three desde el CDN, pero **no le gasta 4 MB a
+  quien no tiene WebGL2**. Repite la comprobación de `hasWebGL()` a propósito: el módulo carga
+  demasiado tarde para servir de algo ahí. La sonda afirma que `avatar.glb` se pide UNA vez.
+- Cabecera de verdad: `og:image`/`twitter:card`, JSON-LD `Person`, `canonical`, `theme-color`,
+  favicon SVG en línea, `lang="es"`, enlace de salto al contenido, hilo de secciones con
+  `aria-current` y botón de copiar el correo.
+- `tools/make_poster.mjs` (nuevo): genera `export/poster.jpg` (1920×1080, el cuarto sin texto) y
+  `export/og.jpg` (1800×945, render + nombre en una capa aparte) **desde la escena en vivo**.
+
+### Verificación
+
+`LANDING OK` — `node tools/landing_probe.mjs` recorre las 5 secciones en escritorio Y en vertical
+y afirma: viaje de cámara real, 3D encendido/apagado donde toca, hilo de secciones correcto, cero
+desborde a 375 px, pantalla de carga retirada, `avatar.glb` pedido una sola vez, y los dos planes B
+(sin WebGL y con jsdelivr bloqueado) con la página legible. 58-60 fps.
+`PROBE OK errors []` y `INK OK` siguen pasando tras el cambio a `pointermove`.
+Capturas: `generated/renders/landing_hibrido_*.png`, `landing_hibrido_movil_*.png`,
+`landing_plano_*.png`, `landing_sincdn_*.png`.
+
+### Bloqueantes que siguen siendo del usuario
+
+- **Capturas de PipeBot** (`refs/pipebot/CAPTURAS.md`). El caso ya se sostiene sin ellas; las
+  capturas van en una tira debajo del diagrama, no en su lugar.
+- **LinkedIn, WhatsApp de trabajo y dominio propio.** Entran en la lista de contacto y en el
+  `sameAs` del JSON-LD; hoy `<link rel="canonical">` apunta a un dominio que aún no existe.
+- **Publicar.** `export/` es estático y se sube tal cual, pero `avatar.glb` está en `.gitignore`:
+  hay que copiarlo aparte o quitarlo del ignore antes de desplegar.
