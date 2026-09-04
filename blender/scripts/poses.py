@@ -103,7 +103,7 @@ def aim(arm, bone, direction):
 # eje mas delgado de la nube de vertices de la mano (PCA) desambiguado con la curvatura de los
 # dedos (las yemas se doblan HACIA la palma); sale igual en reposo y en SIT. No coincide con
 # ningun eje local puro: la palma mira a -0.75 X + 0.65 Z en handL y a +0.75 X + 0.65 Z en handR
-# (los huesos del brazo derecho son espejo en X). En SIT la palma queda mirando hacia adentro.
+# (los huesos del brazo derecho son espejo en X). En SIT la palma mira ABAJO, sobre el teclado.
 PALM_LOCAL = {'L': (-0.750, -0.120, 0.650), 'R': (0.751, -0.118, 0.650)}
 
 
@@ -139,6 +139,55 @@ def aim_roll(arm, bone, direction, palm, palm_local):
     return tuple(pb.rotation_euler)
 
 
+def roll(arm, bone, angle_rad):
+    """Gira `bone` sobre su PROPIO eje (+Y local) sin cambiar a donde apunta.
+
+    Es la pronacion/supinacion del antebrazo. Post-multiplicar por una rotacion en Y local
+    deja la direccion del hueso intacta y solo cambia su giro.
+    """
+    import bpy
+    from mathutils import Matrix
+    pb = arm.pose.bones[bone]
+    pb.rotation_mode = 'XYZ'
+    pb.rotation_euler = (pb.rotation_euler.to_matrix() @ Matrix.Rotation(angle_rad, 3, 'Y')).to_euler('XYZ')
+    bpy.context.view_layer.update()
+    return tuple(pb.rotation_euler)
+
+
+def aim_palm(arm, side, fore_dir, hand_dir, palm_dir, share=0.5):
+    """Resuelve antebrazo + mano apuntando el hueso Y ADEMAS la palma.
+
+    Por que existe: `aim()` usa la rotacion minima, o sea que clava la direccion del hueso
+    pero deja el giro al azar. En una mano eso deja la palma mirando a cualquier lado: la
+    pose de tecleo salia con las manos VERTICALES, palma contra palma, en vez de apoyadas
+    sobre el teclado.
+
+    `aim_roll()` sola lo arregla, pero mete TODO el giro en la muneca y ahi la piel se
+    retuerce (los pesos de Meshy no aguantan 80 grados de torsion en una articulacion). Como
+    en un brazo real, el giro se reparte: `share` de la torsion va al ANTEBRAZO (pronacion,
+    que es de donde sale de verdad) y el resto queda en la muneca.
+
+    Devuelve {f'forearm{side}': euler, f'hand{side}': euler}.
+    """
+    import bpy
+    from mathutils import Vector
+    fa, ha = f'forearm{side}', f'hand{side}'
+    out = {fa: aim(arm, fa, fore_dir)}
+    aim(arm, ha, hand_dir)   # provisional: fija la direccion, el giro sale al azar
+
+    # Torsion que falta para llevar la palma a `palm_dir`, medida alrededor del eje de la mano.
+    axis = Vector(hand_dir).normalized()
+    cur = ((arm.matrix_world @ arm.pose.bones[ha].matrix).to_3x3() @ Vector(PALM_LOCAL[side])).normalized()
+    a = (cur - axis * cur.dot(axis))
+    b = (Vector(palm_dir).normalized() - axis * Vector(palm_dir).normalized().dot(axis))
+    if a.length > 1e-6 and b.length > 1e-6:
+        a.normalize(); b.normalize()
+        twist = math.atan2(a.cross(b).dot(axis), a.dot(b))
+        out[fa] = roll(arm, fa, twist * share)
+    out[ha] = aim_roll(arm, ha, hand_dir, palm_dir, PALM_LOCAL[side])
+    return out
+
+
 # Altura a la que hay que subir la articulacion de la cadera sobre `seat_anchor` (tope del
 # asiento, z=0.47) para que el muslo apoye por su eje y no por su piel: ~medio grosor de muslo.
 SEAT_LIFT = 0.07
@@ -149,10 +198,15 @@ SEAT_LIFT = 0.07
 # mano (-+0.05, 0.995, 0.0) = horizontal, apoyada sobre el teclado.
 # Deja la muneca en (+-0.145, 0.84, 0.828): la palma queda sobre la cara superior del laptop
 # y las yemas no alcanzan la tapa (borde inferior en y=1.068).
+# La palma mira ABAJO (-0.985 en z) con el lado del pulgar apenas levantado: DIR_PALM en
+# animate.py. Los valores salen de `calibrate_hands.py` con `aim_palm()`, que reparte la
+# torsion (77 grados en total) mitad en el antebrazo (pronacion) y mitad en la muneca.
+# Antes se generaban con `aim()` a secas, que deja el giro al azar: las manos quedaban
+# VERTICALES, palma contra palma, como rezando sobre el teclado.
 TYPING_HOME = {
     'upper_armL': deg(7.06, -2.58, 40.13), 'upper_armR': deg(6.63, 2.41, -39.90),
-    'forearmL': deg(-47.18, 20.31, 44.60), 'forearmR': deg(-46.59, -20.32, -45.19),
-    'handL': deg(4.60, 0.61, -15.17), 'handR': deg(4.09, -0.58, 16.23),
+    'forearmL': deg(-67.45, 41.85, 7.03), 'forearmR': deg(-66.34, -41.95, -8.59),
+    'handL': deg(9.87, 38.60, -9.23), 'handR': deg(9.08, -37.99, 10.80),
 }
 
 # --- pose sentada frente al teclado.

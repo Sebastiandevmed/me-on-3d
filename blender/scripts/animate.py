@@ -42,10 +42,15 @@ SX = {'L': 1.0, 'R': -1.0}
 DIR_UPPER = lambda s: (-SX[s] * 0.06, 0.0, -0.998)      # brazo vertical, codo al torso
 DIR_FORE = lambda s: (SX[s] * 0.13, 0.99, 0.02)         # antebrazo adelante y al centro
 DIR_HAND = lambda s: (SX[s] * 0.05, 0.995, 0.0)         # mano horizontal sobre el teclado
+# Hacia donde mira la PALMA. Sin esto las manos salian verticales (palma contra palma), porque
+# aim() clava la direccion del hueso pero deja el giro al azar. Tecleando la palma mira ABAJO,
+# con el lado del pulgar apenas levantado (como en un teclado real).
+DIR_PALM = lambda s: (SX[s] * 0.15, -0.05, -0.985)
 # Brazos colgando (pose reclinada del intro).
 DIR_UPPER_DOWN = lambda s: (-SX[s] * 0.16, -0.30, -0.94)
 DIR_FORE_DOWN = lambda s: (-SX[s] * 0.10, 0.10, -0.99)
 DIR_HAND_DOWN = lambda s: (-SX[s] * 0.04, 0.22, -0.97)
+DIR_PALM_DOWN = lambda s: (SX[s] * 0.92, -0.35, -0.18)   # brazos colgando: la palma mira al muslo
 
 
 # --------------------------------------------------------------------------- utilidades
@@ -115,12 +120,13 @@ def finish(act, length, cyclic):
     return act
 
 
-def solve_arms(torso=None, upper=None, fore=None, hand=None):
+def solve_arms(torso=None, upper=None, fore=None, hand=None, palm=None):
     """Resuelve los eulers de la cadena del brazo apuntando a direcciones del mundo.
 
     Aplica SIT a todo el rig, encima el `torso` del frame (para que los brazos queden
     coherentes con la inclinacion), y luego aim() en orden padre->hijo.
-    Devuelve {hueso: euler}.
+    Con `palm` la mano se resuelve con `poses.aim_palm()`, que ademas orienta la PALMA y
+    reparte la torsion entre antebrazo y muneca. Devuelve {hueso: euler}.
     """
     poses.apply(arm, SIT)
     if torso:
@@ -134,6 +140,9 @@ def solve_arms(torso=None, upper=None, fore=None, hand=None):
     for s in 'LR':
         if upper:
             out[f'upper_arm{s}'] = poses.aim(arm, f'upper_arm{s}', upper(s))
+        if palm and fore and hand:
+            out.update(poses.aim_palm(arm, s, fore(s), hand(s), palm(s)))
+            continue
         if fore:
             out[f'forearm{s}'] = poses.aim(arm, f'forearm{s}', fore(s))
         if hand:
@@ -254,7 +263,7 @@ poses.apply(arm, SIT)
 # reimporta el rig (otros ejes locales de hueso) SIT queda invalidado y esto lo delata.
 def check_sit_arms(tol_deg=1.0):
     from mathutils import Euler
-    solved = solve_arms(upper=DIR_UPPER, fore=DIR_FORE, hand=DIR_HAND)
+    solved = solve_arms(upper=DIR_UPPER, fore=DIR_FORE, hand=DIR_HAND, palm=DIR_PALM)
     worst = 0.0
     for b, e in solved.items():
         qa = Euler(e, 'XYZ').to_quaternion(); qb = Euler(SIT[b], 'XYZ').to_quaternion()
@@ -299,6 +308,7 @@ for f in range(1, 50, 2):                       # 1..49; el 49 repite el 1 (bucl
         upper=lambda s: (-SX[s] * 0.06 + drift * 0.3, 0.0 + 0.012 * up(s), -0.998),
         fore=lambda s: (SX[s] * 0.13 + drift, 0.99, 0.02 + 0.05 * up(s)),
         hand=lambda s: (SX[s] * 0.05 + drift, 0.995, STROKE * up(s)),
+        palm=DIR_PALM,
     ))
 finish(act, 48, cyclic=True)
 
@@ -537,6 +547,7 @@ for f, u in ((1, 0.0), (18, 0.22), (36, 0.62), (52, 1.07), (62, 0.97), (72, 1.0)
         upper=lambda s: lerp3(DIR_UPPER_DOWN(s), DIR_UPPER(s), u),
         fore=lambda s: lerp3(DIR_FORE_DOWN(s), DIR_FORE(s), u),
         hand=lambda s: lerp3(DIR_HAND_DOWN(s), DIR_HAND(s), u),
+        palm=lambda s: lerp3(DIR_PALM_DOWN(s), DIR_PALM(s), u),   # de palma al muslo a palma al teclado
     ))
 finish(act, 72, cyclic=False)
 
