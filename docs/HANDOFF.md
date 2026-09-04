@@ -558,8 +558,12 @@ tres detecciones:
 | Sin WebGL2 (three r170 no trae WebGL1) | `hasWebGL()` antes de construir el renderer | inmediato |
 | CDN de three caído / sin importmap | reloj de arranque del script clásico; el módulo lo desarma con `window.__moduloVivo()` al correr | 8 s |
 | El GLB no llega o llega roto | `onError` del loader, más un reloj de respaldo | inmediato / 25 s |
+| JavaScript apagado | `<noscript><style>`: no corre ni el script clásico | inmediato |
 
-En los tres el hero cae a `poster.jpg` y el texto manda.
+En los cuatro el hero cae a `poster.jpg` y el texto manda. El caso `<noscript>` repite a propósito
+las reglas de `body[data-3d="none"]`: sin JS no se puede poner ese atributo, y hacer que el estado
+por omisión del `<body>` sea el plano obligaría a TODO el mundo a bajarse `poster.jpg`. La sonda
+compara los dos caminos para que no se desincronicen.
 
 **Trampa de CSS, para no repetirla.** El velo del hero en plan B se pintaba con `z-index:-1` y
 **no se veía**: el contexto de apilado lo crea `<main>`, no la sección, así que un descendiente de
@@ -612,5 +616,6 @@ Capturas: `generated/renders/landing_hibrido_*.png`, `landing_hibrido_movil_*.pn
   capturas van en una tira debajo del diagrama, no en su lugar.
 - **LinkedIn, WhatsApp de trabajo y dominio propio.** Entran en la lista de contacto y en el
   `sameAs` del JSON-LD; hoy `<link rel="canonical">` apunta a un dominio que aún no existe.
-- **Publicar.** `export/` es estático y se sube tal cual, pero `avatar.glb` está en `.gitignore`:
-  hay que copiarlo aparte o quitarlo del ignore antes de desplegar.
+- **Publicar.** Resuelto a medias: `tools/build_site.sh` arma `dist/` (4.4 MB) con el GLB copiado
+  explícitamente y un `_headers` de cachés, listo para arrastrar a Netlify o Cloudflare Pages.
+  Queda decidir el dominio y cambiar el `<link rel="canonical">`.

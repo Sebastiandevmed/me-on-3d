@@ -152,9 +152,24 @@ vez de la pantalla de carga tapándolo todo:
 | Sin WebGL2 (three r170 ya no trae WebGL1) | `hasWebGL()` antes de construir nada | inmediato |
 | El CDN de three no responde, o el navegador no soporta importmap | script **clásico** en la página: el `<script type="module">` ni llega a correr | 8 s |
 | El GLB no llega o llega roto | `onError` del loader, y un reloj de respaldo | inmediato / 25 s |
+| JavaScript apagado del todo | `<noscript><style>` — no corre ni el script clásico | inmediato |
 
-Por eso el plan B (`window.__planPlano`) **no vive dentro del módulo**. En los tres casos el hero
+Por eso el plan B (`window.__planPlano`) **no vive dentro del módulo**. En los cuatro casos el hero
 cae a `poster.jpg`, el texto manda y el resto del sitio funciona igual.
+
+### Publicar
+
+```bash
+tools/build_site.sh              # arma dist/ (4.4 MB) con todo lo necesario
+(cd dist && python3 -m http.server 8090)   # verlo antes de subir
+```
+
+`dist/` se arrastra a Netlify, Cloudflare Pages o Vercel. El script existe porque publicar tiene
+una trampa: `export/*.glb` está en `.gitignore` (se regenera con `export_glb.py`), así que quien
+suba `export/` tal cual publica un sitio **sin personaje**. `build_site.sh` copia el GLB
+explícitamente, falla si no está, y escribe un `_headers` con cachés largas para lo pesado.
+Antes de publicar hay que cambiar el `<link rel="canonical">`, que apunta a un dominio que todavía
+no existe.
 
 ### Verificación
 
@@ -166,8 +181,8 @@ Recorre las cinco secciones en escritorio y en vertical, y afirma: que la cámar
 que el 3D se apaga donde el modo dice, que el hilo de secciones señala la sección correcta, que no
 hay desborde horizontal a 375 px, que la pantalla de carga se quita sola, que `avatar.glb` se pide
 **una** vez (el `preload` del `<head>` podría duplicar los 4 MB si el `as` o el `crossorigin` no
-casaran con `GLTFLoader`), y que los dos planes B —sin WebGL y con jsdelivr bloqueado— dejan la
-página legible. Deja las capturas en `generated/renders/landing_*.png`.
+casaran con `GLTFLoader`), y que los tres planes B —sin WebGL, con jsdelivr bloqueado y sin
+JavaScript— dejan la página legible. Deja las capturas en `generated/renders/landing_*.png`.
 
 ### Pendiente (necesita material del usuario)
 

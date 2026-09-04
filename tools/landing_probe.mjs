@@ -139,6 +139,21 @@ await planB('plano', `http://127.0.0.1:${PORT}/index.html?3d=off`, []);
 await planB('sincdn', `http://127.0.0.1:${PORT}/index.html`, ['*jsdelivr*']);
 await send('Network.setBlockedURLs', { urls: [] });
 
+// ---- sin JavaScript no corre ni el script clasico: el respaldo es el <noscript><style>.
+// Si esa hoja se desincroniza de las reglas de body[data-3d="none"], la pantalla de carga
+// vuelve a tapar el sitio entero y nadie se entera hasta que alguien entra con JS apagado.
+await send('Emulation.setScriptExecutionDisabled', { value: true });
+await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/index.html` });
+await sleep(2500);
+const vis = (sel, prop) => ev(`getComputedStyle(document.querySelector('${sel}')).${prop}`);
+if (await vis('#carga', 'display') !== 'none') fails.push('[nojs] la pantalla de carga tapa el sitio sin JavaScript');
+if (await vis('#escena', 'display') !== 'none') fails.push('[nojs] el lienzo 3D sigue puesto sin JavaScript');
+if (!/poster/.test(await vis('#hero', 'backgroundImage'))) fails.push('[nojs] el hero no cae al poster estatico');
+if (await vis('#proyectos h2', 'visibility') !== 'visible') fails.push('[nojs] los proyectos no se ven');
+await shot('landing_nojs_hero.png');
+console.log(`LANDING nojs     pagina legible · <noscript> al dia · desborde ${await desborde()} px`);
+await send('Emulation.setScriptExecutionDisabled', { value: false });
+
 ws.close(); cleanup();
 if (fails.length) { for (const f of fails) console.error('LANDING FAIL', f); process.exit(1); }
 console.log('LANDING OK');

@@ -214,14 +214,25 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
   #escena,#carga,#hilo a{transition:none}
 }
 </style>
+<!-- Sin JavaScript no corre NADA, ni siquiera el script clasico del plan B, y la pantalla de
+     carga taparia el sitio entero para siempre. Estas reglas repiten a proposito las de
+     body[data-3d="none"]: no se puede poner ese atributo sin JS, y hacer que el estado por
+     omision del <body> sea el plano obligaria a TODO el mundo a bajarse poster.jpg. -->
+<noscript><style>
+  #carga,#escena,.pista,.escena::before{display:none!important}
+  #hero{position:relative;background:#000 url(poster.jpg) center/cover no-repeat}
+  #hero::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:linear-gradient(90deg,transparent 30%,color-mix(in srgb,var(--noche) 62%,transparent) 52%,var(--noche) 78%)}
+  @media (max-width:820px){#hero{background-position:60% center}}
+</style></noscript>
 </head><body data-3d="on">
 
 <a class="saltar" href="#contenido">Saltar al contenido</a>
 
-<div id="carga"><p id="cargaTxt">cargando el cuarto…</p><div id="barra"><i></i></div></div>
+<div id="carga" role="status" aria-live="polite"><p id="cargaTxt">cargando el cuarto…</p><div id="barra"><i></i></div></div>
 <div id="escena" aria-hidden="true"></div>
 
-<ul id="hilo" aria-label="Secciones">
+<ul id="hilo" role="list" aria-label="Secciones">
   <li><a href="#hero" aria-label="Portada"></a></li>
   <li><a href="#sobreMi" aria-label="Cómo trabajo"></a></li>
   <li><a href="#stack" aria-label="Lo que hay en las pantallas"></a></li>
@@ -253,7 +264,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
       <p class="kicker">Lo que hay en las pantallas</p>
       <h2>Herramientas que uso de verdad</h2>
       <p>Ordenadas por en cuántos proyectos las tengo puestas hoy, no por cuáles suenan mejor.</p>
-      <ul class="stack">
+      <ul class="stack" role="list">
         <li data-peso="alto">React</li><li data-peso="alto">TypeScript</li><li data-peso="alto">Supabase</li>
         <li data-peso="alto">Python</li><li data-peso="alto">GSAP</li>
         <li>Next.js</li><li>Cloudflare Workers</li><li>Node y Express</li><li>Shopify Liquid</li>
@@ -284,7 +295,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
             <div class="fila"><span>Antes</span><span class="b"><span style="width:100%"></span></span><span class="val">460 KB</span></div>
             <div class="fila despues"><span>Después</span><span class="b"><span style="width:2.6%"></span></span><span class="val">12 KB</span></div>
           </div>
-          <ul class="tags"><li>Shopify Liquid</li><li>JS plano</li><li>Python</li><li>163 productos</li></ul>
+          <ul class="tags" role="list"><li>Shopify Liquid</li><li>JS plano</li><li>Python</li><li>163 productos</li></ul>
         </div>
       </article>
 
@@ -311,7 +322,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
             </div>
           </div>
           <p class="specimen">Tipografías: <b>Italiana</b> solo para el logotipo · <b>Cormorant Garamond</b> para títulos y voz editorial · <b>Raleway</b> para todo el cuerpo y la interfaz.</p>
-          <ul class="tags"><li>Design system</li><li>Research de marca</li><li>React</li><li>Maqueta funcional</li></ul>
+          <ul class="tags" role="list"><li>Design system</li><li>Research de marca</li><li>React</li><li>Maqueta funcional</li></ul>
         </div>
       </article>
 
@@ -378,7 +389,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
           </div>
           <p class="decision">Lo difícil no fue el bot: fue el panel donde una persona toma la conversación sin que el bot le siga escribiendo encima al cliente. La conversación tiene dueño explícito en la base de datos, y mientras es de la persona, el agente calla.</p>
           <p class="traspaso"><span class="pill on">bot_active</span> ⇄ <span class="pill hum">human_active</span> — un estado en Postgres decide quién contesta.</p>
-          <ul class="tags"><li>Node y Express</li><li>Twilio</li><li>Supabase</li><li>Redis</li><li>Realtime</li></ul>
+          <ul class="tags" role="list"><li>Node y Express</li><li>Twilio</li><li>Supabase</li><li>Redis</li><li>Realtime</li></ul>
           <!-- Pendiente del usuario: capturas del panel y de una conversación real.
                Nombres y prioridad en refs/pipebot/CAPTURAS.md. Cuando lleguen, van en una
                tira <figure> debajo del diagrama, no reemplazándolo: el diagrama explica el
@@ -393,7 +404,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
       <p class="kicker">Hablemos</p>
       <h2>Contame qué necesitás y te digo si soy la persona indicada</h2>
       <p class="bajada">Si no lo soy, también te lo digo. Respondo en el día.</p>
-      <ul class="enlaces">
+      <ul class="enlaces" role="list">
         <li><a href="mailto:sebastianmedev@gmail.com?subject=Proyecto%20web">sebastianmedev@gmail.com</a>
             <button class="copiar" type="button" data-copiar="sebastianmedev@gmail.com">copiar</button></li>
         <li><a href="https://github.com/Sebastiandevmed" rel="me noopener">github.com/Sebastiandevmed</a></li>
