@@ -4,11 +4,10 @@
 # porque esa regenera la textura desde cero y se llevaria por delante cualquier retoque).
 #
 # QUE ARREGLA (medido con --flat y --probe antes de tocar nada):
-#   Meshy pinto una barba que cubre mandibula y mejillas, pero dejo TODO el menton y la zona de
-#   la boca como una sola mancha de piel plana de ~5.8 cm de alto, sin labios y con una muesca
-#   oscura abajo. En el visor eso se lee como una placa clara en mitad de la barba (y la muesca
-#   como un diente). Sebastian lleva barba completa cerrada: se cierra la barba sobre el menton
-#   y se deja una banda de labios con su tono.
+#   Meshy pinta la barba bien —bigote, mandibula y perilla— pero deja la zona de la BOCA como
+#   piel plana, sin labios. En el visor eso se lee como una placa palida en mitad de la cara.
+#   Este script dibuja ahi los labios y la linea de abertura. NADA MAS: la barba de Meshy no
+#   se toca (ver el bloque "LA BARBA NO SE TOCA" mas abajo, y por que rellenarla fue un error).
 #
 # COMO: por texel, no por UV. El atlas reempaquetado son miles de islas sueltas, asi que dos
 # texeles vecinos en la textura pueden estar en partes del cuerpo sin relacion. Se rasteriza cada
@@ -20,9 +19,15 @@
 #      y = (1 - v) * S ("arriba primero"). Sin voltear, la mascara sale espejada en vertical y
 #      se pinta sobre islas que no tienen nada que ver: la zona de la cara caia sobre el hoodie.
 #      Es la misma convencion de fix_character_material.py y texture_touchup.py.
-#   2. `image.pixels` devuelve LINEAR (la textura esta marcada como sRGB). La piel del personaje
-#      es sRGB 0.94/0.58/0.48, que en lineal cae a 0.45 de luminancia: con umbrales pensados
-#      "a ojo" la cara entera se clasificaba como barba. Aqui se clasifica en sRGB.
+#   2. ESPACIO DE COLOR. El comentario que habia aqui decia que `image.pixels` devuelve LINEAR.
+#      Es FALSO para esta imagen, y costo un bug entero: medido en la sesion 8, el PNG guarda la
+#      piel de Meshy como (236, 158, 133), que es el skin_srgb del landmark, o sea que `pixels`
+#      entrega sRGB. Por eso `srgb = to_srgb(rgb)` es una conversion de MAS, y por eso la
+#      luminancia de la piel que imprime --probe da 0.849 y no 0.665.
+#      - Los umbrales de clasificacion (SKIN_LUM, HAIR_LUM, SKIN_RED) estan calibrados contra
+#        ESE espacio doblemente convertido y funcionan: no se tocan.
+#      - Pero un color que se ESCRIBE va tal cual, sin to_linear(). Escribirlo convertido a
+#        lineal es lo que dejaba el labio en (146, 47, 39), rojo de lapiz labial.
 #
 # MEDIDO (--probe): la cara separa limpiamente en dos grupos por color, sin solape.
 #   piel (r-b > 0.10): luminancia sRGB p5..p95 = 0.60 .. 0.86
@@ -50,33 +55,61 @@ SKIN_LUM = 0.55         # piel: clara...
 SKIN_RED = 0.10         # ...y rojiza (r - b)
 HAIR_LUM = 0.50         # pelo/barba: oscuro y sin rojo
 
-# --- barba del menton. Todo relativo a la altura de los ojos (landmarks eye_L/R).
-# El techo va ALTO a proposito: solo se rellena piel, y el bigote es pelo, asi que el borde
-# de arriba lo pone la propia frontera piel/bigote y no una linea recta. Con 0.063 el corte
-# recto del techo se veia como el borde de una caja.
-CHIN_TOP = 0.055        # m bajo los ojos
-# 0.065 y no 0.055: el difuminado del borde se come 8 mm, y a 0.055 las esquinas de arriba
-# de la mancha de piel se quedaban sin rellenar y se veian como dos recuadros claros.
-# Ensanchar es inofensivo porque solo se rellena PIEL, y mas alla ya es barba.
-CHIN_X = 0.065          # m de medio ancho
-CHIN_SOFT = 0.008       # m de borde difuminado
-GRAIN = 0.5             # cuanto grano de la piel original se conserva al teñir (0 = plano)
+# --- LA BARBA NO SE TOCA (sesion 8) ---------------------------------------------------------
+#
+# Hasta la sesion 7 este script RELLENABA de color barba una zona del menton, con la premisa de
+# que "Meshy dejo todo el menton y la boca como una sola mancha de piel plana". Esa premisa era
+# FALSA, y es la causa del pasamontañas negro que se veia en el visor.
+#
+# Medido con `--probe --tex generated/character_texture_repacked.png`, o sea sobre lo que pinto
+# Meshy ANTES de cualquier retoque nuestro:
+#
+#   ojos-58mm |............#####...######...........|   bigote, en dos mitades
+#   ojos-66mm |.......########.........######.......|
+#   ojos-74mm |##....##......................##...##|   piel en el centro = boca
+#   ojos-86mm |#######.......................#######|   barba solo en la mandibula
+#   ojos-98mm |########.....................########|
+#   ojos-106mm|#########.......#####........########|   perilla
+#   ojos-122mm|   ###############################   |
+#
+# Eso es exactamente la barba de refs/face/contact_sheet.jpg: bigote arriba, barba por la
+# mandibula, boca y menton despejados, perilla debajo del labio. Lo unico que de verdad falta
+# es el DIBUJO DE LOS LABIOS: Meshy deja esa zona como piel plana, y sin labios se lee como una
+# placa palida en mitad de la cara.
+#
+# Rellenar esa zona la convertia en un bloque negro (en cel-shading todo el pelo colapsa a una
+# banda plana) y la "boca" pasaba a ser la ranura que el relleno dejaba sin cubrir: de ahi los
+# garabatos claros. Este script ya solo dibuja labios sobre piel.
 
-# --- labios: la banda que NO se rellena, entre el bigote y el menton.
-LIP_Z_TOP = 0.068       # m bajo los ojos
-LIP_Z_BOT = 0.082       # m bajo los ojos
-LIP_X = 0.018           # m de medio ancho
-# Factor sobre la piel local. Con 0.62/0.40/0.38 la boca salia salmon y a tamaño real se
-# leia como un caramelo pegado en mitad de la barba: en cel, con bandas y contorno, un tono
-# claro en medio de una masa oscura canta mucho mas que en PBR.
-LIP_TINT = (0.42, 0.26, 0.25)
-# Radio (en m) alrededor del menton del que se saca el color de la barba. Sacarlo de TODO
-# el pelo de la cabeza mete la gorra en la mediana y el relleno sale mas claro que la
-# barba de al lado: se veia un recuadro gris en mitad de la barba.
-BEARD_NEAR = 0.020
-# Percentil y no mediana: la barba vecina incluye sus propias luces, y con la mediana el
-# relleno salia un punto mas claro que la barba de alrededor y se leia el recuadro.
-BEARD_PCT = 30
+# --- labios. Todo relativo a la altura de los ojos (landmarks eye_L/R).
+# El hueco de piel que deja Meshy va de ojos-70mm a ojos-104mm en el centro; los labios ocupan
+# su mitad superior y dejan menton por debajo, antes de la perilla.
+MOUTH_Z = 0.081         # m bajo los ojos: la LINEA de abertura (donde se juntan los labios)
+LIP_X = 0.026           # m de medio ancho (boca de 52 mm; la cara mide 105 mm de ancho)
+# Asimetricos a proposito: el labio de arriba es mas fino que el de abajo. Con las dos mitades
+# iguales la boca se lee como una pastilla y no como una boca.
+LIP_H_UP = 0.008        # m de alto del labio superior
+LIP_H_LOW = 0.011       # m de alto del labio inferior
+LIP_SOFT = 0.0015       # m de borde difuminado del contorno del labio
+# Tono ABSOLUTO en sRGB, no un factor sobre la piel de alrededor (con factor el resultado
+# dependia de la piel vecina y se fallo por los dos lados en la sesion 6). Ahora los labios
+# van sobre PIEL, no sobre barba, asi que el tono es un rosa apagado y no un marron: la piel
+# del personaje es sRGB (0.94, 0.58, 0.475) y el labio tiene que quedar claramente mas oscuro
+# y mas rojo, pero sin irse a marron.
+# (0.74, 0.40, 0.38) salia ROJO DE LAPIZ LABIAL en el visor: el cel-shading no tiene medios
+# tonos, asi que cualquier salto de saturacion respecto a la piel se lee como color puro. Lo
+# que separa un labio de la piel en una ilustracion plana es el VALOR, no la saturacion: mismo
+# tono que la piel (0.94, 0.58, 0.475) y un escalon mas oscuro.
+LIP_SRGB = (0.78, 0.47, 0.43)
+# --- linea de abertura de la boca: lo que de verdad hace legible una boca en cel-shading.
+# Con el labio ya apagado, esta linea es la que carga con la legibilidad, asi que va algo mas
+# gruesa que en el primer intento (0.0022).
+MOUTH_W = 0.88          # fraccion de LIP_X que abarca la linea (las comisuras se afilan)
+MOUTH_H = 0.0027        # m de medio alto de la linea
+MOUTH_SRGB = (0.32, 0.16, 0.14)   # marron muy oscuro: la abertura entre los labios
+# Guardas: la boca ronda los 2-4 mil texeles. Si se dispara es que LIP_* se comio la cara.
+LIP_MIN = 800
+LIP_MAX = 9000
 
 
 def face_texels(me, mw, S):
@@ -175,7 +208,20 @@ def main():
 
     img = bpy.data.materials['Character'].node_tree.nodes['Principled BSDF'] \
         .inputs['Base Color'].links[0].from_node.image
-    if img is None or not img.filepath_raw.endswith('character_texture_clean.png'):
+    # --tex mide otra etapa de la cadena (p.ej. character_texture_repacked.png, que es lo que
+    # pinto Meshy antes de cualquier retoque nuestro). Solo en modo lectura: sirve para separar
+    # "esto lo pinto Meshy" de "esto lo pintamos nosotros".
+    if '--tex' in args and PROBE:
+        alt = args[args.index('--tex') + 1]
+        if not os.path.isabs(alt): alt = os.path.join(common.ROOT, alt)
+        img = bpy.data.images.load(alt, check_existing=True); img.reload()
+        # El nodo del material tiene que apuntar a la MISMA imagen o el render del probe saldria
+        # con la textura vieja mientras los numeros salen de la nueva. No se guarda el .blend en
+        # modo probe, asi que el cambio muere con el proceso.
+        bpy.data.materials['Character'].node_tree.nodes['Principled BSDF'] \
+            .inputs['Base Color'].links[0].from_node.image = img
+        print('FACE_FEATURES leyendo', os.path.basename(alt))
+    elif img is None or not img.filepath_raw.endswith('character_texture_clean.png'):
         common.fail('el material no apunta a character_texture_clean.png (ejecutar fix_character_material.py)')
     S = img.size[0]
     buf = np.empty(S * S * 4, np.float32); img.pixels.foreach_get(buf)
@@ -194,69 +240,90 @@ def main():
           % (ntri, zone.sum(), is_skin.sum(), is_hair.sum(),
              wz[zone].min(), wz[zone].max(), eye_z))
 
-    below = zone & (np.abs(wx) <= CHIN_X) & (wz <= eye_z - CHIN_TOP)
-    # Elipse y no rectangulo: una banda recta de labios en mitad de la barba se lee como una
-    # cinta pegada. La elipse se afila en las comisuras, que es como termina una boca.
-    lip_zc = eye_z - (LIP_Z_TOP + LIP_Z_BOT) / 2.0
-    lip_hz = (LIP_Z_BOT - LIP_Z_TOP) / 2.0
-    lip_r = np.sqrt((wx / LIP_X) ** 2 + ((wz - lip_zc) / lip_hz) ** 2)
-    lips = zone & (lip_r <= 1.0)
-    fill = is_skin & below & ~lips
+    # --- forma de la boca. Dos medias elipses que comparten la linea de abertura: la de arriba
+    # mas fina (LIP_H_UP) y la de abajo mas llena (LIP_H_LOW). `lip_r` vale 0 en la linea y 1 en
+    # el contorno del labio, asi que sirve igual para la mascara y para el difuminado del borde.
+    mouth_zc = eye_z - MOUTH_Z
+    dz = wz - mouth_zc
+    hz = np.where(dz >= 0, LIP_H_UP, LIP_H_LOW)          # arriba = z mayor (mas cerca de los ojos)
+    lip_r = np.sqrt((wx / LIP_X) ** 2 + (dz / hz) ** 2)
+    # Solo sobre PIEL: asi el bigote y la perilla que pinto Meshy se quedan como estan aunque
+    # caigan dentro de la elipse. `~is_hair` y no `is_skin` porque entre HAIR_LUM (0.50) y
+    # SKIN_LUM (0.55) hay una tierra de nadie donde caen los trazos con que Meshy dibujo el
+    # contorno del bigote; si se excluyen quedan como garabatos claros sobre el labio.
+    lips = zone & (lip_r <= 1.0) & ~is_hair
 
     if PROBE:
         for name, m in (('zona', zone), ('piel', is_skin), ('pelo', is_hair),
-                        ('menton', below), ('labios', lips), ('relleno', fill)):
+                        ('labios', lips)):
             print('  %-8s %8d texeles' % (name, int(m.sum())))
+        # --- mapa de ocupacion piel/pelo en coordenadas de MUNDO (para disenar la mascara).
+        # Cada celda = 4 mm. '#' = mayoria pelo, '.' = mayoria piel, ' ' = sin cara.
+        CELL = 0.004
+        xs, zs = wx[zone], wz[zone]
+        x0, x1 = -0.075, 0.075
+        z0, z1 = eye_z - 0.135, eye_z - 0.010
+        nx, nz = int((x1 - x0) / CELL), int((z1 - z0) / CELL)
+        print('  MAPA piel(.) / pelo(#) — columnas x de %+0.3f a %+0.3f, filas z de ojos-10mm a ojos-135mm' % (x0, x1))
+        for j in range(nz):
+            zlo, zhi = z1 - (j + 1) * CELL, z1 - j * CELL
+            row = ''
+            for i in range(nx):
+                xlo, xhi = x0 + i * CELL, x0 + (i + 1) * CELL
+                cel = zone & (wx >= xlo) & (wx < xhi) & (wz >= zlo) & (wz < zhi)
+                ns, nh = int((cel & is_skin).sum()), int((cel & is_hair).sum())
+                row += ' ' if ns + nh < 4 else ('#' if nh > ns else '.')
+            print('   z=%+0.3f (ojos%+0.0fmm) |%s|' % (zhi, (zhi - eye_z) * 1000, row))
         for name, m in (('piel', is_skin), ('pelo', is_hair)):
             q = np.percentile(lum[m], [5, 50, 95]) if m.any() else [0, 0, 0]
             print('  LUM %-5s p5/p50/p95 %s' % (name, ' '.join('%.3f' % v for v in q)))
         dbg = srgb.copy()
         if not FLAT:
             dbg[zone] = dbg[zone] * 0.4 + np.array([0.0, 0.0, 0.5], np.float32)
-            dbg[fill] = np.array([0.95, 0.15, 0.15], np.float32)
+            dbg[is_hair] = dbg[is_hair] * 0.4 + np.array([0.5, 0.25, 0.0], np.float32)   # barba de Meshy, la que NO se toca
             dbg[lips] = np.array([0.15, 0.95, 0.25], np.float32)
         render_probe(img, px, dbg, lm, 'face_probe_%s.png' % ('flat' if FLAT else 'front'))
         return
 
     if not is_hair.any():
-        common.fail('no se encontro barba de donde sacar el color (revisar HAIR_LUM)')
-    if fill.sum() < 2000:
-        common.fail('la zona de menton a rellenar tiene solo %d texeles: revisar CHIN_*' % int(fill.sum()))
+        common.fail('no se encontro barba en la cara (revisar HAIR_LUM): la barba de Meshy es la referencia')
+    if lips.sum() < LIP_MIN:
+        common.fail('la boca tiene solo %d texeles (minimo %d): revisar MOUTH_Z / LIP_*' % (int(lips.sum()), LIP_MIN))
+    if lips.sum() > LIP_MAX:
+        common.fail('la boca tiene %d texeles (tope %d): la elipse se esta comiendo la cara, '
+                    'revisar LIP_X / LIP_H_*' % (int(lips.sum()), LIP_MAX))
 
-    # Borde difuminado por arriba (hacia el bigote), por los lados y alrededor de los labios.
-    # El difuminado de arriba va POR ENCIMA del techo, no por debajo: si no, la franja de
-    # piel justo bajo el bigote se queda a medio teñir y se ve el corte. Arriba del techo solo
-    # hay bigote (pelo), que no se rellena.
-    w = ramp((eye_z - CHIN_TOP + CHIN_SOFT / 2) - wz, 0.0, CHIN_SOFT / 2)
-    w = np.minimum(w, ramp(CHIN_X - np.abs(wx), 0.0, CHIN_SOFT))
-    # Transicion CORTA alrededor de la boca (1.5 mm). Con el mismo difuminado que el resto
-    # del borde, la barba solo llegaba a peso 1 en lip_r = 1.7 y quedaba un anillo de piel
-    # entre el labio y la barba, que se leia como una mancha.
-    w = np.minimum(w, ramp((lip_r - 1.0) * lip_hz, 0.0, 0.0015))
-    w = w * fill
+    # --- labios. Difuminado CORTO (LIP_SOFT, 1.5 mm) hacia adentro desde el contorno: mas
+    # ancho y el labio se deshace en la piel; a cero se ve el escalon de texeles.
+    # OJO, espacio de color (medido en la sesion 8, y NO es lo que decia el comentario viejo):
+    # para ESTA imagen `img.pixels` entrega valores ya codificados en sRGB, no lineales. Se
+    # comprueba en el PNG: la piel de Meshy esta guardada como (236, 158, 133), que es el
+    # skin_srgb del landmark, y la mediana de luminancia que imprime --probe (0.849) solo cuadra
+    # si `to_srgb(rgb)` es una conversion de MAS sobre algo que ya era sRGB.
+    # Consecuencia: un color se escribe TAL CUAL, sin to_linear(). Escribirlo convertido a lineal
+    # es lo que ponia el labio en (146, 47, 39) — rojo de lapiz labial — en vez de (199, 120, 110).
+    # Los umbrales de clasificacion (SKIN_LUM, HAIR_LUM...) SI estan calibrados contra
+    # `to_srgb(rgb)`, ese espacio doblemente convertido: no se tocan.
+    tint = np.array(LIP_SRGB, np.float32)
+    soft_r = LIP_SOFT / min(LIP_H_UP, LIP_H_LOW)         # LIP_SOFT en unidades de lip_r
+    lw = ramp(1.0 - lip_r, 0.0, soft_r) * lips
+    rgb = rgb * (1 - lw[..., None]) + tint[None, None, :] * lw[..., None]
+    print('LABIOS %d texeles (peso medio %.2f), tono sRGB %s -> escrito %s'
+          % (int((lw > 0.01).sum()), float(lw[lw > 0.01].mean()),
+             [round(float(c), 3) for c in tint], [int(round(float(c) * 255)) for c in tint]))
 
-    near = is_hair & (np.abs(wx) <= CHIN_X + BEARD_NEAR) & (wz <= eye_z - CHIN_TOP + BEARD_NEAR)
-    if near.sum() < 500:
-        common.fail('no hay barba alrededor del menton de donde sacar el color (%d texeles)' % int(near.sum()))
-    beard = np.percentile(rgb[near], BEARD_PCT, axis=0)
-    skin_lum = float(np.median(lum[is_skin]))
-    grain = 1.0 + GRAIN * (lum[..., None] / max(skin_lum, 1e-3) - 1.0)
-    rgb = rgb * (1 - w[..., None]) + np.clip(beard[None, None, :] * grain, 0, 1) * w[..., None]
-    print('BARBA menton: %d texeles teñidos (peso medio %.2f), color sRGB %s de %d texeles de barba vecina'
-          % (int((w > 0.01).sum()), float(w[w > 0.01].mean()),
-             [round(float(c), 3) for c in to_srgb(beard)], int(near.sum())))
-
-    # --- labios: la banda queda como piel plana; se le da tono para que se lea una boca.
-    lip_skin = lips & (lum > SKIN_LUM)
-    if lip_skin.sum() > 200:
-        base = np.median(rgb[is_skin & ~lips], axis=0)
-        tint = np.clip(base * np.array(LIP_TINT, np.float32), 0, 1)
-        lw = ramp(1.0 - lip_r, 0.0, 0.06) * lip_skin   # borde corto: a 0.22 la boca se veia difuminada
-        rgb = rgb * (1 - lw[..., None]) + tint[None, None, :] * lw[..., None]
-        print('LABIOS %d texeles, tono sRGB %s'
-              % (int((lw > 0.01).sum()), [round(float(c), 3) for c in to_srgb(tint)]))
-    else:
-        print('LABIOS zona sin piel que teñir (%d texeles)' % int(lip_skin.sum()))
+    # --- linea de abertura: sin ella los dos labios son una sola mancha de tono plano, y en
+    # cel-shading una mancha plana no se lee como boca.
+    mouth_r = np.sqrt((wx / (LIP_X * MOUTH_W)) ** 2 + (dz / MOUTH_H) ** 2)
+    mouth = zone & (mouth_r <= 1.0) & ~is_hair
+    if mouth.sum() < 40:
+        common.fail('la linea de la boca tiene %d texeles: revisar MOUTH_W / MOUTH_H' % int(mouth.sum()))
+    mtint = np.array(MOUTH_SRGB, np.float32)      # sin to_linear: ver la nota de espacio de color arriba
+    mw_ = ramp(1.0 - mouth_r, 0.0, 0.25) * mouth
+    rgb = rgb * (1 - mw_[..., None]) + mtint[None, None, :] * mw_[..., None]
+    print('BOCA linea %d texeles, tono sRGB %s -> escrito %s'
+          % (int((mw_ > 0.01).sum()), [round(float(c), 3) for c in mtint],
+             [int(round(float(c) * 255)) for c in mtint]))
 
     px[..., :3] = rgb
     img.pixels.foreach_set(px[::-1, :, :].ravel())

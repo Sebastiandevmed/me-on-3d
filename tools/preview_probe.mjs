@@ -40,10 +40,24 @@ const url = (q) => `http://127.0.0.1:${PORT}/preview.html?pdb=1` + (EXTRA ? '&' 
 await send('Page.navigate', { url: url() });   // PREVIEW_QUERY="mat=toon" para probar variantes
 const ev = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true }); return r.result?.result?.value; };
 const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(join(OUT, name), Buffer.from(r.result.data, 'base64')); console.log('PROBE shot', name); };
-const mv = (x, y) => ev(`dispatchEvent(new MouseEvent('mousemove',{clientX:${x},clientY:${y}}));1`);
+// pointermove y no mousemove: lib/scene.js escucha el primero para que el seguimiento tambien
+// funcione arrastrando el dedo en un telefono. Un raton real dispara los dos.
+const mv = (x, y) => ev(`dispatchEvent(new PointerEvent('pointermove',{clientX:${x},clientY:${y}}));1`);
 
 let loaded = false;
 for (let i = 0; i < 60 && !loaded; i++) { await sleep(500); loaded = await ev('!!(window.__status && __status.loaded && __status.env)'); }
+// Si el modulo del visor no llega ni a EJECUTARSE (un error de sintaxis en preview.html o en
+// cualquier lib/*.js, o un import que da 404) entonces window.__status ni siquiera existe, y la
+// linea de abajo reventaba con un opaco `"undefined" is not valid JSON`. Se distingue ese caso
+// del "cargo pero tardo" y se imprimen los errores que la pagina haya recogido en window.__errors.
+if (!(await ev('!!window.__status'))) {
+  const errs = await ev('JSON.stringify(window.__errors || [])');
+  console.error('PROBE el modulo del visor NO se ejecuto: window.__status no existe.');
+  console.error('PROBE errores de la pagina:', errs);
+  console.error('PROBE revisar sintaxis de export/preview.html y export/lib/*.js '
+                + '(node --check sobre una copia .mjs de cada modulo)');
+  process.exit(1);
+}
 await sleep(4500);                                  // intro (3 s) + fundido de pantallas
 await mv(720, 420); await sleep(1500);
 const status = await ev('JSON.stringify({gpu:__status.gpu,loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,fx:__status.fx,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');

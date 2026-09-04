@@ -34,293 +34,64 @@
 <div id="help">Arrastra para orbitar, rueda para zoom. La cabeza mira al cursor. Clic sobre el personaje = vibe (se pone los audífonos y cabecea; también automático cada 30-50 s).</div>
 <div id="info">cargando…</div>
 <script type="module">
+// Arnés de depuración. Todo el motor vive en lib/scene.js; aquí solo quedan el panel de estado,
+// los botones de clip y las variantes ?mat= (que son puro diagnóstico de textura).
+//
+// Contrato con tools/preview_probe.mjs: window.__status / __view / __vibe / __inkFrac.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { applyToon, toonLights } from './lib/toon.js';
-import { createComposer } from './lib/postfx.js';
+import { createAvatarScene } from './lib/scene.js';
 
-// ---- look: cel-shading + contorno + bloom. ?fx=off vuelve al look PBR anterior completo,
-// y ?toon=0 / ?outline=0 / ?bloom=0 / ?vignette=0 apagan una pieza cada uno para comparar.
 const Q = new URLSearchParams(location.search);
-const flag = (n) => Q.get(n) !== '0' && Q.get(n) !== 'off';
-const FX = { on: flag('fx'), toon: flag('fx') && flag('toon'), outline: flag('fx') && flag('outline'),
-             bloom: flag('fx') && flag('bloom'), vignette: flag('fx') && flag('vignette') };
-// Todos los numeros del look son ajustables por query para poder barrerlos con la sonda sin
-// tocar el codigo: ?amb=.3&key=7&rim=.14&nbias=1.25&bloomt=1.05&exp=1.15 ...
-const num = (n, d) => (Q.has(n) ? parseFloat(Q.get(n)) : d);
-// Las puntuales de pantallas y barras estan a ~0.5 m de la cara. En toon pegan mucho mas
-// fuerte que en PBR (no hay rugosidad que reparta la energia ni entorno que compense) y
-// quemaban la piel a blanco puro: se atenuan solo en modo cel.
-const LIT = { screen: num('slit', FX.toon ? 0.30 : 1), bar: num('blit', FX.toon ? 0.70 : 1) };
-const LOOK = {
-  lights: { ambient: num('amb', undefined), key: num('key', undefined), window: num('win', undefined), hemi: num('hemi', undefined), ceil: num('ceil', undefined) },
-  rim: { strength: num('rim', undefined), power: num('rimp', undefined) },
-  fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), normalBias: num('nbias', undefined),
-        strength: num('ostr', undefined), bloomStrength: num('bloomstr', undefined), bloomThreshold: num('bloomt', undefined),
-        vignetteDarkness: num('vign', undefined) },
-};
-
 const info = document.getElementById('info');
-const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '',
-  headQ: () => follow.head && follow.head.quaternion.toArray(), neckQ: () => follow.neck && follow.neck.quaternion.toArray(), chestQ: () => follow.chest && follow.chest.quaternion.toArray(), hpQ: () => follow.hp && follow.hp.quaternion.toArray(),
-  barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: Q.has('pdb') });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-document.body.appendChild(renderer.domElement);   // shadowMap se enciende con el bloque de luces
-{ const gl = renderer.getContext(), d = gl.getExtension('WEBGL_debug_renderer_info'); status.gpu = d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : '?'; }   // que GPU/driver dibuja (la sonda lo imprime)
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060a);
 
-// Cámara de aprobación: Blender (-1.3, 3.7, 1.95) mirando a (0, 0.6, 1.0)  ->  glTF Y-up (x, z, -y).
-// El personaje mira a -Z en glTF (+Y en Blender). Lente 35 mm ≈ 38° vertical (ajustado al encuadre de assembled_v1.png).
-const CAM_POS = new THREE.Vector3(-1.3, 1.95, -3.7), CAM_TGT = new THREE.Vector3(0, 1.0, -0.6);
-const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 100);
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.dampingFactor = 0.08;
-controls.minDistance = 0.6; controls.maxDistance = 12;
-const resetCamera = () => { camera.position.copy(CAM_POS); controls.target.copy(CAM_TGT); controls.update(); };
-resetCamera(); document.getElementById('resetCam').onclick = resetCamera;
-
-// ---- luces. Coordenadas glTF (x, y, z) = Blender (x, z, -y).
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMappingExposure = num('exp', 1.15);
-RectAreaLightUniformsLib.init();
-const lights = [];
-const key = new THREE.SpotLight(0xcfe0ff, 40, 0, Math.PI / 3.4, 0.7, 2);   // key azulada desde arriba-izquierda, con sombra
-key.position.set(-1.2, 2.5, -2.3); key.target.position.copy(CAM_TGT);
-key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
-key.shadow.camera.near = 0.5; key.shadow.camera.far = 12;
-{ const Q = new URLSearchParams(location.search); if (Q.has('nb')) key.shadow.normalBias = parseFloat(Q.get('nb')); if (Q.has('bias')) key.shadow.bias = parseFloat(Q.get('bias')); if (Q.get('shadow') === 'off') key.castShadow = false; }   // pruebas con la sonda
-scene.add(key, key.target); lights.push(key);
-const ceil = new THREE.PointLight(0xffe0c0, 6, 7, 2); ceil.position.set(0.6, 2.6, 0.2); scene.add(ceil); lights.push(ceil);   // calida del techo
-const win = new THREE.RectAreaLight(0x8fb8ff, 5, 3.2, 1.8); win.position.set(-0.3, 1.5, 1.7); win.lookAt(-0.3, 1.2, 0); scene.add(win); lights.push(win);
-const hemi = new THREE.HemisphereLight(0x33405c, 0x0b0b0e, 0.5); scene.add(hemi);
-// luz de las pantallas (se enciende con el fundido) y de las barras RGB (siguen el ciclo de color)
-const SCREEN_POS = { screen_left: [-0.6, 0.95, -1.35], screen_center: [0, 0.95, -1.35], screen_right: [0.6, 0.95, -1.35], screen_laptop: [0, 0.9, -1.0] };
-const screenLights = {};
-for (const [n, p] of Object.entries(SCREEN_POS)) { const l = new THREE.PointLight(0xbfd4ff, 0, 2.2, 2); l.position.set(...p); scene.add(l); screenLights[n] = l; lights.push(l); }
-const barLights = [];
-for (const x of [-1.05, 1.05]) { const l = new THREE.PointLight(0x4090ff, 3 * LIT.bar, 4, 2); l.position.set(x, 1.3, 1.2); scene.add(l); barLights.push(l); lights.push(l); }
-if (FX.toon) toonLights(scene, { key, ceil, win, hemi }, LOOK.lights);   // ver lib/toon.js: +ambiental y +direccional de ventana
-status.lights = lights.length + (FX.toon ? 2 : 0); status.shadows = true;
-
-// Cadena de post-proceso. El contorno es lo que convierte el render en ilustracion; el bloom
-// solo prende monitores y barras RGB (umbral 0.85 en lineal).
-const composer = FX.on ? createComposer(renderer, scene, camera, { outline: FX.outline, bloom: FX.bloom, vignette: FX.vignette, ...LOOK.fx }) : null;
-status.fx = { ...FX, passes: composer ? composer.passes.length : 0 };
-
-new RGBELoader().load('night.hdr?v=' + Date.now(), (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
-  undefined, (e) => console.error('night.hdr: ' + (e.message || e)));
-
-const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
-const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
-
-let mixer = null, actions = {}, screens = [], bars = [], character = null;
-const clock = new THREE.Clock();
-const mouse = { x: 0, y: 0 };
-window.__view = { camera, controls, THREE, follow: () => follow, browup: () => browup(), mouse };   // para sondas headless (encuadres de detalle)
-addEventListener('mousemove', e => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
-
-// ---- mezcla de clips ----
-// idle = base continua; typing y Blink se superponen (huesos disjuntos); browup se superpone a todo.
-// vibe / lookAround / intro son EXCLUSIVOS: apagan idle+typing (vibe también Blink), corren una vez y luego vuelve la base.
-const BASE = ['idle', 'typing', 'Blink'];
-const EXCLUSIVE = { vibe: { fade: 0.5, dropBlink: true }, lookAround: { fade: 0.4, dropBlink: false }, introAnimation: { fade: 0.5, dropBlink: false } };
-let exclusive = null;            // nombre del clip exclusivo en curso
-let screensOnAt = Infinity;      // instante (performance.now) en que empieza el fundido de las pantallas
-// idle no anima spine006/spine003/headphones, así que nadie "reescribe" esos huesos cada frame: hay que
-// deshacer el offset del seguimiento antes del mixer (undoFollow, definido mas abajo junto al resto del sistema).
-
-const playLoop = (n, fade = 0.5) => { const a = actions[n]; if (!a) return; undoFollow(); a.enabled = true; a.setLoop(THREE.LoopRepeat, Infinity); a.clampWhenFinished = false; a.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play(); };
-const playOnce = (n, fade, cb) => {
-  const a = actions[n]; if (!a) return;
-  undoFollow(); a.enabled = true; a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
-  a.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).fadeIn(fade).play();
-  const onEnd = (e) => { if (e.action === a) { mixer.removeEventListener('finished', onEnd); cb && cb(); } };
-  mixer.addEventListener('finished', onEnd);
-};
-const startBase = (fade, skipBlink = false) => { for (const n of BASE) { if (skipBlink && n === 'Blink') continue; if (actions[n] && !actions[n].isRunning()) playLoop(n, fade); } };
-const stopBase = (fade, dropBlink) => { for (const n of BASE) { if (n === 'Blink' && !dropBlink) continue; if (actions[n] && actions[n].isRunning()) { const a = actions[n]; const w = a.getEffectiveWeight(); a.setEffectiveWeight(w); a.fadeOut(fade); } } };  // fadeOut arranca desde 1: fijar el peso actual evita un salto si se pide en mitad de un fadeIn
-const playExclusive = (n) => {
-  if (exclusive || !actions[n]) return false;
-  const cfg = EXCLUSIVE[n]; exclusive = n;
-  stopBase(cfg.fade, cfg.dropBlink);
-  playOnce(n, cfg.fade, () => { actions[n].fadeOut(cfg.fade); startBase(cfg.fade); exclusive = null; });
-  return true;
-};
-const vibe = () => playExclusive('vibe');
-window.__vibe = vibe;   // para la sonda headless
-window.__inkFrac = () => {   // ?pdb=1: densidad de LINEAS de tinta (pixeles mas oscuros que sus dos vecinos).
-  // No sirve contar pixeles oscuros a secas: la escena es nocturna y ya tiene ~58 % casi
-  // negro, asi que esa medida satura y no distingue si el contorno esta pintando o no.
-  // A escala 1:1: el contorno mide 1-1.5 px y al reducir la imagen se difumina y deja de contarse.
-  const W = Math.min(1600, renderer.domElement.width), H = Math.round(W * renderer.domElement.height / renderer.domElement.width), D = 2, TH = 14;
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(renderer.domElement, 0, 0, W, H);
-  const d = g.getImageData(0, 0, W, H).data;
-  const lum = new Float32Array(W * H);
-  for (let i = 0, j = 0; i < d.length; i += 4, j++) lum[j] = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-  let n = 0, tot = 0;
-  for (let y = D; y < H - D; y++) for (let x = D; x < W - D; x++) {
-    const v = lum[y * W + x]; tot++;
-    if ((v + TH < lum[y * W + x - D] && v + TH < lum[y * W + x + D]) ||
-        (v + TH < lum[(y - D) * W + x] && v + TH < lum[(y + D) * W + x])) n++;
-  }
-  return n / tot;
-};
-const browup = () => { const a = actions.browup; if (!a || a.isRunning()) return; playOnce('browup', 0.1, () => a.fadeOut(0.15)); };
-
-// ?v= evita el cache HTTP de Chrome: python http.server no manda Cache-Control y tras regenerar el GLB
-// un reload normal seguia mostrando el modelo viejo (pesos viejos + seguimiento nuevo = cara deforme).
-loader.load('avatar.glb?v=' + Date.now(), (gltf) => {
-  scene.add(gltf.scene);
-  gltf.scene.traverse(o => {
-    if (o.isMesh) { o.frustumCulled = false; o.castShadow = !/^(screen_|window_far|floor|ceiling|wall_)/.test(o.name); o.receiveShadow = !/^(screen_|window_far)/.test(o.name); }
-    if (/^screen_/.test(o.name) && o.isMesh) screens.push(o);
-    if (/^rgb_bar_/.test(o.name) && o.isMesh) bars.push(o);
-    if (o.name === 'spine006') follow.head = o;
-    if (o.name === 'spine005') follow.neck = o;
-    if (o.name === 'spine003') follow.chest = o;
-    if (o.name === 'headphones') follow.hp = o;
-    if (o.name === 'Body') character = o;
-    if (o.isMesh && o.material && o.material.map) { o.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy(); o.material.map.needsUpdate = true; }   // texturas nitidas en escorzo
+const av = createAvatarScene({ query: Q, bustCache: true, onReady: (api) => {
+  document.querySelectorAll('button[data-clip]').forEach(b => {
+    b.disabled = !api.actions[b.dataset.clip];
+    b.onclick = () => { const n = b.dataset.clip; if (n === 'browup') api.browup(); else api.playExclusive(n); };
   });
-  // Cel-shading. Pantallas y barras RGB quedan fuera: son paneles emisivos que el bucle de
-  // animacion muta y que alimentan el bloom. Conserva el `map` (y por tanto la anisotropia).
-  if (FX.toon) applyToon(gltf.scene, { rim: LOOK.rim });
-  saveFollow();
-  mixer = new THREE.AnimationMixer(gltf.scene);
-  for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
-  status.loaded = true;
-  status.clips = () => Object.entries(actions).filter(([, a]) => a.isRunning()).map(([n, a]) => n + (a.getEffectiveWeight() < 0.99 ? '(' + a.getEffectiveWeight().toFixed(2) + ')' : '')).join(' + ') || '—';
-  // intro una vez, luego fundido a idle + typing + Blink
-  if (actions.introAnimation) { playExclusive('introAnimation'); } else startBase(0.3);
-  // pantallas: apagadas al cargar, fundido de encendido hasta 2.5
-  screens.forEach(s => { s.material = s.material.clone(); s.material.emissiveIntensity = 0; });
-  screensOnAt = performance.now() + 1500;   // el fundido se aplica en animate()
-  bars.forEach(b => { b.material = b.material.clone(); });
-  // ?mat= variante de material del personaje (para comparar capturas con la sonda):
-  //   front = solo cara frontal (la malla de Meshy son islas con bordes que no coinciden; con doubleSided
-  //           el interior iluminado asoma por las rendijas como vetas claras)
-  //   flat  = front + rugosidad 1 y sin reflejo del entorno (look mas plano, tipo cartoon)
-  //   toon  = front + MeshToonMaterial con la misma textura (sombreado por escalones)
-  const MAT = new URLSearchParams(location.search).get('mat');
-  if (character && MAT) {
-    const old = character.material;
-    if (MAT.startsWith('maxlod')) {   // maxlod2 / maxlod3: tope de nivel de mipmap por GL crudo (WebGL2 TEXTURE_MAX_LOD)
-      const lod = parseInt(MAT.slice(6)); const tex = old.map; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      renderer.initTexture(tex); const gl = renderer.getContext(), wt = renderer.properties.get(tex).__webglTexture;
-      gl.bindTexture(gl.TEXTURE_2D, wt); gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, lod); gl.bindTexture(gl.TEXTURE_2D, null);
-    }
-    else if (MAT === 'nomap') { character.material = old.clone(); character.material.map = null; character.material.color.set(0x606060); }
-    else if (MAT === 'nomip') { character.material = old.clone(); character.material.map = old.map.clone(); character.material.map.generateMipmaps = false; character.material.map.minFilter = THREE.LinearFilter; character.material.map.needsUpdate = true; }
-    else if (MAT === 'toon') { character.material = new THREE.MeshToonMaterial({ map: old.map, side: THREE.FrontSide }); }
-    else { character.material = old.clone(); character.material.side = THREE.FrontSide; if (MAT === 'flat') { character.material.roughness = 1; character.material.envMapIntensity = 0.15; } }
-  }
-  // vibe automático cada 30-50 s (el clip ahora dura 9 s) y al hacer clic sobre el personaje
-  const schedule = () => setTimeout(() => { vibe(); schedule(); }, 30000 + Math.random() * 20000); schedule();
-  document.querySelectorAll('button[data-clip]').forEach(b => { b.disabled = !actions[b.dataset.clip]; b.onclick = () => { const n = b.dataset.clip; if (n === 'browup') browup(); else playExclusive(n); }; });
-  let downAt = null;   // reusa el `ray` global (declarado junto al sistema de seguimiento)
-  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
-  renderer.domElement.addEventListener('pointerup', (e) => {
-    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return; // fue un arrastre de la cámara
-    ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
-    if (character && ray.intersectObject(character, true).length) vibe();
-  });
-}, undefined, (err) => { console.error('avatar.glb: ' + (err.message || err)); });
+  applyMatVariant(api);
+} });
 
-// ---- seguimiento de cursor: la cabeza MIRA al punto 3D del cursor (a la profundidad de la cabeza).
-// El giro se reparte por la columna para que no parezca una cabeza rigida sobre un cuello tieso:
-// pecho (spine003) 30 % del yaw, cuello (spine005) 25 % del yaw y 30 % del pitch, cabeza (spine006)
-// el resto. Como cada hueso es hijo del anterior, las partes se suman en mundo. El nodo headphones (hijo de la cabeza,
-// audifonos colgando del cuello) cancela el giro para no columpiarse. Se aplica DESPUES del mixer y
-// se deshace antes del siguiente update (los clips base no escriben estos huesos cada frame).
-// Limites cortos y giro parcial: a 45/25/20 grados la cara se deformaba (la barba se hundia en el
-// collar al mirar abajo y el cuello se retorcia a los lados). Ahora la cabeza recorre GAIN del angulo
-// hacia el cursor (mira "hacia" el cursor, no al cursor) y se detiene en 28 / 12 / 9 grados.
-const YAW_MAX = Math.PI / 6.4, PITCH_UP = Math.PI / 15, PITCH_DOWN = Math.PI / 20;   // 28 / 12 / 9 grados
-const GAIN = 0.6;            // fraccion del angulo geometrico que recorre la cabeza
-const TAU = 0.35;            // s: constante de tiempo del suavizado (independiente del framerate)
-const DEAD = 0.02;           // rad: zona muerta para que el temblor del mouse no mueva la cabeza
-// El cuello NO recibe pitch: el collar y la capucha del hoodie llevan ~30 % de peso de spine005 y al
-// cabecear con el cuello la cabeza se hunde en el collar (se vio en preview_shot.png con el cursor abajo).
-const SHARE = { chest: { yaw: 0.25, pitch: 0 }, neck: { yaw: 0.2, pitch: 0 } };   // la cabeza pone lo que falta hasta 1
-const follow = { head: null, neck: null, chest: null, hp: null };   // Object3D
-const saved = { head: null, neck: null, chest: null, hp: null };             // cuaternion tal como lo dejan los clips
-const look = { yaw: 0, pitch: 0 };
-let followWeight = 0;
-const undoFollow = () => { for (const k in follow) if (follow[k] && saved[k]) follow[k].quaternion.copy(saved[k]); };
-const saveFollow = () => { for (const k in follow) if (follow[k]) saved[k] = (saved[k] || new THREE.Quaternion()).copy(follow[k].quaternion); };
-const ray = new THREE.Raycaster();
-const vHead = new THREE.Vector3(), vTarget = new THREE.Vector3(), vDir = new THREE.Vector3(), vCam = new THREE.Vector3();
-const qParent = new THREE.Quaternion(), qTmp = new THREE.Quaternion(), qW = new THREE.Quaternion(), qHeadOld = new THREE.Quaternion(), qPitch = new THREE.Quaternion();
-const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0);
-function worldRotate(obj, q, weight) {   // newLocal = parent^-1 * slerp(I, q, w) * parent * local
-  obj.parent.getWorldQuaternion(qParent);
-  qW.identity().slerp(q, weight);
-  qTmp.copy(qParent).invert().multiply(qW).multiply(qParent);   // parent^-1 * qW * parent
-  obj.quaternion.premultiply(qTmp);
-}
-function applyHeadFollow(dt) {
-  const active = !(exclusive === 'vibe' || exclusive === 'lookAround');
-  followWeight += ((active ? 1 : 0) - followWeight) * (1 - Math.exp(-dt / 0.4));
-  if (!follow.head) return;
-  follow.head.getWorldPosition(vHead);
-  camera.getWorldPosition(vCam);
-  ray.setFromCamera(new THREE.Vector2(mouse.x, mouse.y), camera);
-  vTarget.copy(ray.ray.origin).addScaledVector(ray.ray.direction, vHead.distanceTo(vCam));
-  vDir.subVectors(vTarget, vHead);
-  if (vDir.length() > 0.05) {
-    vDir.normalize();
-    const yaw = Math.atan2(-vDir.x, -vDir.z);          // el personaje mira a -Z
-    const pitch = Math.asin(Math.max(-1, Math.min(1, vDir.y)));
-    const ty = Math.max(-YAW_MAX, Math.min(YAW_MAX, yaw * GAIN)), tp = Math.max(-PITCH_DOWN, Math.min(PITCH_UP, pitch * GAIN));
-    const k = 1 - Math.exp(-dt / TAU);   // suavizado exponencial por tiempo, no por frame
-    if (Math.abs(ty - look.yaw) > DEAD) look.yaw += (ty - look.yaw) * k;
-    if (Math.abs(tp - look.pitch) > DEAD) look.pitch += (tp - look.pitch) * k;
-  }
-  if (followWeight < 0.001) return;
-  let yawLeft = 1, pitchLeft = 1;
-  for (const k of ['chest', 'neck']) {
-    if (!follow[k]) continue;
-    qPitch.setFromAxisAngle(AX_X, look.pitch * SHARE[k].pitch);
-    qTmp.setFromAxisAngle(AX_Y, look.yaw * SHARE[k].yaw).multiply(qPitch);
-    worldRotate(follow[k], qTmp, followWeight);
-    yawLeft -= SHARE[k].yaw; pitchLeft -= SHARE[k].pitch;
-  }
-  // pecho y cuello ya giraron: la cabeza aplica el resto (el giro de mundo se compone igual, la cabeza es hija)
-  qHeadOld.copy(follow.head.quaternion);
-  qPitch.setFromAxisAngle(AX_X, look.pitch * pitchLeft);
-  qTmp.setFromAxisAngle(AX_Y, look.yaw * yawLeft).multiply(qPitch);
-  worldRotate(follow.head, qTmp, followWeight);
-  if (follow.hp) {   // conservar el mundo: hp_local = head_new^-1 * head_old * hp_old
-    qTmp.copy(follow.head.quaternion).invert().multiply(qHeadOld);
-    follow.hp.quaternion.premultiply(qTmp);
-  }
-}
+window.__status = av.status;
+window.__view = { camera: av.camera, controls: av.controls, THREE, follow: () => av.follow, browup: () => av.browup(), mouse: av.mouse };
+window.__vibe = () => av.vibe();
+window.__inkFrac = () => av.inkFrac();
 
-let frames = 0, fpsT = performance.now(), watchdog = 0, rafId = 0;
-// requestAnimationFrame con respaldo por temporizador: en Chrome headless (sin display link) rAF nunca dispara.
-function nextFrame() { rafId = requestAnimationFrame(animate); clearTimeout(watchdog); watchdog = setTimeout(() => { cancelAnimationFrame(rafId); animate(); }, 120); }
-function animate() {
-  clearTimeout(watchdog); nextFrame();
-  const dt = Math.min(clock.getDelta(), 0.1); const t = clock.elapsedTime;
-  undoFollow();
-  if (mixer) mixer.update(dt);
-  saveFollow();
-  applyHeadFollow(dt);
-  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); for (const [n, l] of Object.entries(screenLights)) l.intensity = 1.6 * LIT.screen * k * k; }
-  bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; barLights[i] && barLights[i].color.copy(b.material.emissive); });
-  controls.update(); if (composer) composer.render(dt); else renderer.render(scene, camera);
-  frames++; status.frames++; status.exclusive = exclusive; status.screen = screens.length ? screens[0].material.emissiveIntensity : 0; const now = performance.now();
-  if (now - fpsT > 500) { status.fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
-    info.textContent = (status.loaded ? 'glb ok' : 'cargando glb…') + ' · hdr ' + (status.env ? 'ok' : '…') + ' · ' + status.fps + ' fps\nclips: ' + status.clips() + (exclusive ? '\nexclusivo: ' + exclusive : ''); }
+document.getElementById('resetCam').onclick = () => av.resetCamera();
+
+let last = 0;
+av.onFrame(() => {
+  const now = performance.now();
+  if (now - last < 500) return;
+  last = now;
+  info.textContent = (av.status.loaded ? 'glb ok' : 'cargando glb…') + ' · hdr ' + (av.status.env ? 'ok' : '…') + ' · ' + av.status.fps + ' fps'
+    + '\nclips: ' + av.status.clips() + (av.status.exclusive ? '\nexclusivo: ' + av.status.exclusive : '');
+});
+
+// ?mat= variante de material del personaje (para comparar capturas con la sonda):
+//   basic  = la TEXTURA tal cual, sin luz ni bandas. Es el único modo que separa "la textura
+//            está mal pintada" de "el cel-shading la está aplastando". EMPEZAR SIEMPRE POR AHÍ.
+//   front  = solo cara frontal (la malla de Meshy son islas con bordes que no coinciden; con
+//            doubleSided el interior iluminado asoma por las rendijas como vetas claras)
+//   flat   = front + rugosidad 1 y sin reflejo del entorno (look más plano, tipo cartoon)
+//   toon   = front + MeshToonMaterial con la misma textura (sombreado por escalones)
+//   nomap / nomip / maxlodN = pruebas de mipmap y de textura, de la sesión 5
+function applyMatVariant(api) {
+  const MAT = Q.get('mat');
+  const character = api.character;
+  if (!character || !MAT) return;
+  const old = character.material, renderer = api.renderer;
+  if (MAT.startsWith('maxlod')) {   // maxlod2 / maxlod3: tope de nivel de mipmap por GL crudo (WebGL2 TEXTURE_MAX_LOD)
+    const lod = parseInt(MAT.slice(6)), tex = old.map;
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    renderer.initTexture(tex);
+    const gl = renderer.getContext(), wt = renderer.properties.get(tex).__webglTexture;
+    gl.bindTexture(gl.TEXTURE_2D, wt); gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_LOD, lod); gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+  else if (MAT === 'nomap') { character.material = old.clone(); character.material.map = null; character.material.color.set(0x606060); }
+  else if (MAT === 'nomip') { character.material = old.clone(); character.material.map = old.map.clone(); character.material.map.generateMipmaps = false; character.material.map.minFilter = THREE.LinearFilter; character.material.map.needsUpdate = true; }
+  else if (MAT === 'toon') { character.material = new THREE.MeshToonMaterial({ map: old.map, side: THREE.FrontSide }); }
+  else if (MAT === 'basic') { character.material = new THREE.MeshBasicMaterial({ map: old.map, side: THREE.FrontSide }); }
+  else { character.material = old.clone(); character.material.side = THREE.FrontSide; if (MAT === 'flat') { character.material.roughness = 1; character.material.envMapIntensity = 0.15; } }
 }
-animate();
 </script></body></html>

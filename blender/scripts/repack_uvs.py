@@ -25,6 +25,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, common
+import fix_character_material as fcm
 import numpy as np
 
 SRC = os.path.join(common.GEN, 'character_texture_logo.png')
@@ -158,6 +159,32 @@ src = bpy.data.images.load(SRC, check_existing=True); src.reload()
 w, h = src.size
 px = np.empty(w * h * 4, dtype=np.float32); src.pixels.foreach_get(px)
 img = px.reshape(h, w, 4)[::-1, :, :3].astype(np.float32)   # arriba primero
+
+# Dilatar el color de las islas VIEJAS sobre sus canaletas ANTES de muestrear.
+#
+# El atlas de Meshy llega con las canaletas sin rellenar y con las islas a 2-4 px unas de otras,
+# asi que el muestreo bilineal de sample() puede cruzar al vecino: en el borde de una isla de piel
+# se llevaria el negro de la isla de hoodie o de gorra de al lado. El recorte de baricentricas de
+# abajo no lo evita: mantiene el PUNTO de muestreo dentro del triangulo viejo, pero la huella 2x2
+# del filtro se sale igual.
+#
+# HONESTIDAD SOBRE EL EFECTO MEDIDO (sesion 9): esto se anadio buscando las motas oscuras que se
+# ven en la ceja, la sien y el menton, y NO las quita — la cara sale igual antes y despues. Se
+# conserva porque el sangrado que evita es real y cuesta 4 pasadas de numpy, pero no es la causa
+# de esas motas. Ojo con el metodo que llevo a la hipotesis falsa: se conto "texeles mucho mas
+# oscuros que su vecindario" sobre el atlas y salieron 2670, con la mitad pegados al borde de
+# isla; al mirarlos de verdad, la mayoria eran PESTANAS, el iris y el logo del pecho. Detalle
+# legitimo. Cualquier medida de textura hay que verla recortada y ampliada antes de creersela.
+#
+# No se reusa el character_texture_clean.png que deja fix_character_material.py en este mismo
+# punto de la cadena (dilatado con PAD 16 sobre el layout de Meshy) porque ese nombre lo
+# sobrescribe la segunda pasada con el layout NUEVO: leerlo aqui romperia la idempotencia en
+# cuanto se repitiera el reempaquetado. Este script parte SIEMPRE de character_texture_logo.png.
+DILATE_SRC = 4      # texeles; el bilineal alcanza ~1, con 4 sobra margen y cuesta 4 pasadas
+mask_src = raster_mask(uv_old, w)
+print('REPACK dilatando el atlas de origen sobre sus canaletas (%d px, cobertura %.1f %%)'
+      % (DILATE_SRC, mask_src.mean() * 100))
+img = fcm.dilate_colors(img, mask_src, DILATE_SRC)
 
 
 def sample(u, v):

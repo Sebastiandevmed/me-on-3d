@@ -42,7 +42,18 @@ LID_PIVOT_BACK = 0.006  # m hacia dentro de la cara donde queda el pivote
 LID_PIVOT_UP = 0.016    # m por encima del centro del ojo donde queda el pivote
 BROW_OFFSET = 0.0003    # m que la ceja sobresale de la piel (apenas apoyada)
 BROW_THICK = 0.0022     # m de bulto de la ceja (perfil eliptico, se afila en las puntas)
-BROW_ARCH = 0.0022      # m de arco de la ceja
+# --- forma del arco. Con ARCH 0.0022 y un taper SIMETRICO (sin(pi*t)**0.5, que vale ~1 en casi
+# todo el recorrido) la ceja salia como una BARRA recta de altura constante y puntas romas: es lo
+# que el usuario llamo "losa". Una ceja real no es simetrica:
+#   * sube desde la cabeza hasta un pico situado a ~2/3 hacia la sien, no en el centro;
+#   * la cola cae POR DEBAJO de la altura de la cabeza;
+#   * es gruesa en el primer tercio y se afila hasta terminar en punta.
+# Las tres cosas se controlan aqui. Referencia: refs/face/contact_sheet.jpg.
+BROW_ARCH = 0.0055      # m que sube el pico del arco sobre la cabeza de la ceja
+BROW_TAIL_DROP = 0.0035 # m que cae la cola por debajo de la cabeza
+BROW_PEAK = 0.62        # t del pico (0 = cabeza junto a la nariz, 1 = cola en la sien)
+BROW_HEAD_H = 0.60      # altura de la cabeza como fraccion de la altura maxima
+BROW_HEAD_T = 0.14      # t en el que la ceja alcanza su altura maxima
 # La ceja de malla se hizo en su dia MAS GRANDE que la pintada para taparla. Desde la sesion 5
 # `texture_touchup.py` BORRA la pintada, asi que ya no hace falta: con brow_h = 21 mm y
 # brow_len = 66 mm salian dos barras negras de lado a lado que se leian como un antifaz.
@@ -54,7 +65,7 @@ BROW_LEN_SCALE = 0.84
 # negro se lee como un antifaz y aclarado sin mas se lee como una mancha lila. Se fija aqui un
 # castaño oscuro emparentado con la barba (sRGB medido 0.34/0.27/0.30, ver face_features.py).
 BROW_SRGB = (0.26, 0.185, 0.155)
-BROW_SEGS = 11          # secciones a lo largo de la ceja
+BROW_SEGS = 15          # secciones a lo largo de la ceja (11 dejaban el arco facetado)
 BROW_PROF = 8           # vertices del perfil eliptico
 BONE_LEN = 0.015
 HOOP_MINOR = 0.0016
@@ -248,21 +259,39 @@ def make_lid(face, name, centre, a, b, material, ey_hint):
     return new_mesh_object(name, verts, faces, material)
 
 
+def brow_profile(t):
+    """Perfil de la ceja en t (0 = cabeza junto a la nariz, 1 = cola en la sien).
+
+    Devuelve (dz, hprof):
+      dz     = desplazamiento vertical respecto de la altura base de la ceja, en m.
+      hprof  = altura como fraccion de la maxima (0 = punta, 1 = la parte mas gruesa).
+    Ver la nota de BROW_ARCH sobre por que la forma es asimetrica."""
+    # Pico desplazado: sin(pi * t**p) alcanza su maximo donde t**p = 0.5, o sea en t = BROW_PEAK
+    # si p = ln(0.5)/ln(BROW_PEAK). Con p = 1 el pico cae en el centro y la ceja se ve plana.
+    p = math.log(0.5) / math.log(BROW_PEAK)
+    dz = BROW_ARCH * math.sin(math.pi * t ** p) - BROW_TAIL_DROP * t ** 2.2
+    # Altura: sube rapido en la cabeza (BROW_HEAD_T) y decae hasta 0 en la cola, que asi
+    # termina en punta en vez de en un corte recto.
+    head = min(1.0, t / BROW_HEAD_T)
+    hprof = (BROW_HEAD_H + (1.0 - BROW_HEAD_H) * head) * (1.0 - t) ** 0.5
+    return dz, hprof
+
+
 def make_brow(face, name, x_in, x_out, z_c, h, material):
-    """Cordon curvo de seccion eliptica apoyado en la frente y afilado en las puntas.
+    """Cordon curvo de seccion eliptica apoyado en la frente, con arco asimetrico.
 
     `h` llega ya escalado por BROW_H_SCALE: ver la nota de esa constante sobre por que la ceja
-    dejo de tener que ser mas grande que la pintada."""
+    dejo de tener que ser mas grande que la pintada. La forma la define brow_profile()."""
     up = Vector((0.0, 0.0, 1.0))
     n, prof = BROW_SEGS, BROW_PROF
     verts, faces = [], []
     for i in range(n):
         t = i / (n - 1)
-        taper = math.sin(math.pi * t) ** 0.5
+        dz, hprof = brow_profile(t)
         x = x_in + t * (x_out - x_in)
-        z = z_c + BROW_ARCH * math.sin(math.pi * t)
-        hh = (h / 2.0) * (0.30 + 0.70 * taper)
-        tt = BROW_THICK * (0.35 + 0.65 * taper)
+        z = z_c + dz
+        hh = (h / 2.0) * hprof
+        tt = BROW_THICK * (0.30 + 0.70 * hprof)
         p, nor = face.front(x, z)
         if p is None:
             p, nor = Vector((x, 0.10, z)), Vector((0.0, 1.0, 0.0))

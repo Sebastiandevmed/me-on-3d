@@ -25,6 +25,10 @@ step fix_character_material_2;  $B blender/character.blend blender/scripts/fix_c
 step check_character_material;  $B blender/character.blend blender/scripts/checks/check_character_material.py
 step texture_touchup;           $B blender/character.blend blender/scripts/texture_touchup.py
 step face_features;             $B blender/character.blend blender/scripts/face_features.py
+# SIEMPRE el ultimo retoque de textura: vuelve a dilatar el color de las islas sobre las
+# canaletas. texture_touchup y face_features solo pintan DENTRO de los triangulos, asi que sin
+# esto las canaletas conservan el color de antes del repintado y salen como rayas claras.
+step redilate_texture;          $B blender/character.blend blender/scripts/redilate_texture.py
 step smooth_normals;            $B blender/character.blend blender/scripts/smooth_normals.py
 step check_rig;                 $B blender/character.blend blender/scripts/checks/check_rig.py
 step check_face_export;         $B blender/character.blend blender/scripts/checks/check_face_export.py

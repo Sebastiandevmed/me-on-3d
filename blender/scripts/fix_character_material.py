@@ -65,20 +65,40 @@ def uv_mask(body, size):
     return mask
 
 
+_ORTHO = ((-1, 0), (1, 0), (0, -1), (0, 1))
+_DIAG = ((-1, -1), (-1, 1), (1, -1), (1, 1))
+
+
+def _spread(rgb, filled, offsets):
+    """Suma de los vecinos ya rellenos en `offsets` y cuantos eran."""
+    acc = np.zeros_like(rgb); cnt = np.zeros(filled.shape, dtype=np.float32)
+    for dy, dx in offsets:
+        sh = np.roll(np.roll(rgb, dy, axis=0), dx, axis=1)
+        fm = np.roll(np.roll(filled, dy, axis=0), dx, axis=1)
+        acc += sh * fm[..., None]; cnt += fm
+    return acc, cnt
+
+
 def dilate_colors(rgb, mask, steps):
-    """Rellena los pixeles fuera de la mascara con el color del vecino de isla mas cercano
-    (iterativo: cada paso copia desde los 8 vecinos ya rellenos)."""
+    """Rellena los pixeles fuera de la mascara con el color de la isla MAS CERCANA
+    (iterativo: cada paso avanza un anillo desde las islas ya rellenas).
+
+    Dos sub-pasadas por paso, ortogonales antes que diagonales, y NO una media de los 8
+    vecinos a la vez. La diferencia importa donde dos islas de color muy distinto comparten
+    canaleta, que en el atlas de Meshy es casi en todas partes (islas a 2-4 px): promediando
+    los 8, un texel de canaleta pegado a una isla de piel pero en diagonal a una de hoodie
+    salia gris, y ese gris es lo que el filtro bilineal se lleva de vuelta al borde de la
+    isla clara. Con ortogonal primero, el anillo de cada isla toma solo el color de la isla
+    a la que de verdad toca."""
     rgb = rgb.copy(); filled = mask.copy()
     for _ in range(steps):
         new_rgb = rgb.copy(); new_filled = filled.copy()
-        acc = np.zeros_like(rgb); cnt = np.zeros(mask.shape, dtype=np.float32)
-        for dy in (-1, 0, 1):
-            for dx in (-1, 0, 1):
-                if dx == 0 and dy == 0: continue
-                sh = np.roll(np.roll(rgb, dy, axis=0), dx, axis=1)
-                fm = np.roll(np.roll(filled, dy, axis=0), dx, axis=1)
-                acc += sh * fm[..., None]; cnt += fm
+        acc, cnt = _spread(rgb, filled, _ORTHO)
         take = (~filled) & (cnt > 0)
+        new_rgb[take] = acc[take] / cnt[take][:, None]
+        new_filled |= take
+        acc, cnt = _spread(rgb, filled, _DIAG)      # solo los que no tocaban ninguna isla de lado
+        take = (~new_filled) & (cnt > 0)
         new_rgb[take] = acc[take] / cnt[take][:, None]
         new_filled |= take
         rgb, filled = new_rgb, new_filled

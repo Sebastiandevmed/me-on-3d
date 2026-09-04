@@ -56,7 +56,7 @@ for (const v of variants) {
   await sleep(4200 + Number(process.env.SWEEP_EXTRA_MS || 0));   // intro + fundido de pantallas
   // SWEEP_EXTRA_MS desplaza el instante de la captura: Blink dura 240 frames (10 s) y sin
   // esto todas las variantes caen en la misma fase y pueden pillar el ojo cerrado.
-  await ev(`dispatchEvent(new MouseEvent('mousemove',{clientX:720,clientY:420}));1`);
+  await ev(`dispatchEvent(new PointerEvent('pointermove',{clientX:720,clientY:420}));1`);
   if (ZOOM) {   // encuadre de detalle de la cabeza
     await ev(`(() => { const v = window.__view; const h = v.follow().head; if (!h) return 0;
       const p = new v.THREE.Vector3(); h.getWorldPosition(p);

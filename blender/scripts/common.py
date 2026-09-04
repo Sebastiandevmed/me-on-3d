@@ -82,12 +82,23 @@ def mat(name, color=(0.8, 0.8, 0.8, 1), roughness=0.6, metallic=0.0,
         bsdf.inputs['Emission Strength'].default_value = emission_strength
     return m
 
-def box(name, size, location, material=None, collection=None):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
+def box(name, size, location, material=None, collection=None, rotation=(0, 0, 0)):
+    """Caja con la rotacion HORNEADA en la malla.
+
+    `rotation` se pasa al crear (igual que en plane() y cylinder()) y NO se deja en el objeto.
+    Motivo: hasta la sesion 7 quien queria una caja girada hacia `ob.rotation_euler = ...`
+    DESPUES de esta funcion, o sea despues del transform_apply. La rotacion se quedaba en el
+    objeto mientras la malla acababa en coordenadas de mundo, y al girar geometria que ya esta
+    a 0.6-1.5 m del origen la caja SALE DISPARADA. Medido en el GLB: monitor_L/R a 87 cm de su
+    base, controller a 35 cm y laptop_lid a 29 cm. Las cajas sin rotacion caian bien, y por eso
+    el fallo parecia aleatorio ("las pantallas se bugean segun la posicion").
+    Ver el check `checks/check_scene_placement.py`, que lo vigila de aqui en adelante.
+    """
+    bpy.ops.mesh.primitive_cube_add(size=1, location=location, rotation=rotation)
     ob = bpy.context.active_object
     ob.name = name
     ob.scale = size
-    bpy.ops.object.transform_apply(scale=True)
+    bpy.ops.object.transform_apply(rotation=True, scale=True)
     if material: ob.data.materials.append(material)
     if collection:
         for c in ob.users_collection: c.objects.unlink(ob)
