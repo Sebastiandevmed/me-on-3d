@@ -34,7 +34,10 @@ await send('Page.enable'); await send('Runtime.enable');
 // avatar.glb / preview.html del cache HTTP y la sonda mide un modelo VIEJO (sintoma tipico:
 // hpQ null porque el GLB cacheado no tiene el hueso 'headphones').
 await send('Network.enable'); await send('Network.setCacheDisabled', { cacheDisabled: true });
-await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/preview.html${process.env.PREVIEW_QUERY || ''}` });   // PREVIEW_QUERY="?mat=toon" para probar variantes
+// pdb=1 enciende preserveDrawingBuffer para poder medir la imagen final con __inkFrac().
+const EXTRA = (process.env.PREVIEW_QUERY || '').replace(/^[?&]/, '');
+const url = (q) => `http://127.0.0.1:${PORT}/preview.html?pdb=1` + (EXTRA ? '&' + EXTRA : '') + (q ? '&' + q : '');
+await send('Page.navigate', { url: url() });   // PREVIEW_QUERY="mat=toon" para probar variantes
 const ev = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true }); return r.result?.result?.value; };
 const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(join(OUT, name), Buffer.from(r.result.data, 'base64')); console.log('PROBE shot', name); };
 const mv = (x, y) => ev(`dispatchEvent(new MouseEvent('mousemove',{clientX:${x},clientY:${y}}));1`);
@@ -43,7 +46,7 @@ let loaded = false;
 for (let i = 0; i < 60 && !loaded; i++) { await sleep(500); loaded = await ev('!!(window.__status && __status.loaded && __status.env)'); }
 await sleep(4500);                                  // intro (3 s) + fundido de pantallas
 await mv(720, 420); await sleep(1500);
-const status = await ev('JSON.stringify({gpu:__status.gpu,loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
+const status = await ev('JSON.stringify({gpu:__status.gpu,loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,fx:__status.fx,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
 console.log('PROBE status', status);
 const st = JSON.parse(status);
 await shot('preview_shot.png');
@@ -64,6 +67,20 @@ console.log('PROBE vibe', await ev('JSON.stringify({ex:__status.exclusive,clips:
 await shot('preview_shot_vibe.png');
 const errors = await ev('JSON.stringify(window.__errors)');
 console.log('PROBE errors', errors);
+
+// --- A/B del look: misma escena con fx=off (PBR anterior). Sirve de comparativa para el
+// usuario y de medida: el contorno tiene que subir la fraccion de pixeles casi negros.
+await mv(720, 420); await sleep(800);
+const inkFx = await ev('window.__inkFrac ? __inkFrac() : -1');
+await send('Page.navigate', { url: url('fx=off') });
+let loadedOff = false;
+for (let i = 0; i < 60 && !loadedOff; i++) { await sleep(500); loadedOff = await ev('!!(window.__status && __status.loaded && __status.env)'); }
+await sleep(4500); await mv(720, 420); await sleep(1500);
+await shot('preview_shot_pbr.png');
+const inkOff = await ev('window.__inkFrac ? __inkFrac() : -1');
+const errorsOff = await ev('JSON.stringify(window.__errors)');
+console.log('PROBE ink fx=on', inkFx, 'fx=off', inkOff);
+console.log('PROBE errors fx=off', errorsOff);
 ws.close(); cleanup();
 
 // Aserciones sobre lo que produjo la Task 6 del plan de pulido: sin esto la sonda pasaba con
@@ -73,7 +90,15 @@ if (!loaded) fails.push('el visor no cargo (window.__status.loaded/env)');
 if (errors !== '[]') fails.push(`errores de pagina: ${errors}`);
 if (st.hpQ === null || st.hpQ === undefined) fails.push('hpQ es null: el GLB no trae el nodo headphones');
 if (st.shadows !== true) fails.push(`shadows=${st.shadows} (esperado true)`);
-if (st.lights !== 9) fails.push(`lights=${st.lights} (esperado 9)`);
+if (!(st.lights >= 9)) fails.push(`lights=${st.lights} (esperado >= 9)`);
+// El look cel: materiales toon + cadena de 5 pases (render, bloom, contorno, viñeta, output).
+if (!st.fx || st.fx.on !== true) fails.push(`fx apagado: ${JSON.stringify(st.fx)}`);
+else if (st.fx.passes !== 5) fails.push(`pases del composer=${st.fx.passes} (esperado 5)`);
+if (!loadedOff) fails.push('el visor no cargo con fx=off (comparativa PBR)');
+if (errorsOff !== '[]') fails.push(`errores de pagina con fx=off: ${errorsOff}`);
+// El contorno pinta tinta: sin el, la imagen tiene bastantes menos pixeles casi negros.
+if (!(inkFx > 0 && inkOff >= 0)) fails.push(`__inkFrac no midio (fx=${inkFx}, off=${inkOff}); falta ?pdb=1`);
+else if (!(inkFx > inkOff * 1.1)) fails.push(`el contorno no cambia la imagen: tinta fx=${inkFx.toFixed(4)} vs off=${inkOff.toFixed(4)}`);
 if (!(headDist >= 0.1)) fails.push(`la cabeza no sigue al cursor: dist(headQ centro, izquierda)=${headDist.toFixed(4)} < 0.1`);
 if (!(neckDist >= 0.03)) fails.push(`el cuello no acompana a la cabeza: dist(neckQ centro, izquierda)=${neckDist.toFixed(4)} < 0.03`);
 if (fails.length) { for (const f of fails) console.error('PROBE FAIL', f); process.exit(1); }

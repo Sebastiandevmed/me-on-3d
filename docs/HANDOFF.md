@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-03 (sesión 5: cejas duplicadas en browup, rendijas geométricas entre islas, retoque de textura y seguimiento de cursor suave, ver "Sesión 5". Sesión 4: barba estirada al seguir el cursor + reempaquetado UV, normales alisadas y diagnóstico de las vetas, ver "Sesión 4". Sesión 3, plan de pulido: tareas 15-21 completas sobre las 14 de la sesión 2, revisión final de rama hecha y ola de correcciones aplicada. El usuario YA aprobó las capturas visuales de la sesión 3. Pendiente: URL del repo del portafolio, decisión de archivado, integrar `avatar-3d` en `main` y la prueba del visor en ventana real)
+**Última actualización:** 2026-09-03 (sesión 6, EN CURSO: spec nueva `2026-09-03-avatar-pro-landing-design.md` — cel-shading + landing de portafolio, 4 fases. Fase 1 (look cel) hecha y esperando aprobación del usuario, ver "Sesión 6". Sesión 5: cejas duplicadas en browup, rendijas geométricas entre islas, retoque de textura y seguimiento de cursor suave, ver "Sesión 5". Sesión 4: barba estirada al seguir el cursor + reempaquetado UV, normales alisadas y diagnóstico de las vetas, ver "Sesión 4". Sesión 3, plan de pulido: tareas 15-21 completas sobre las 14 de la sesión 2, revisión final de rama hecha y ola de correcciones aplicada. El usuario YA aprobó las capturas visuales de la sesión 3. Pendiente: URL del repo del portafolio, decisión de archivado, integrar `avatar-3d` en `main` y la prueba del visor en ventana real)
 
 ## Cómo retomar
 
@@ -146,3 +146,29 @@ Saldo inicial 186. Balance real consultado antes de la Tarea 10: 94.8 (≈91 gas
 - Vista de ventana: 'a' recortada (cambiar a 'b' si lo pide).
 - Opcional: dejar `refs/code/*.ts` para la pantalla de código (si no, código de ejemplo). Logo ya entregado.
 - Fotos definitivas de cara (opcional) para afinar el parecido al final (Tarea 14).
+
+
+## Sesión 6 (2026-09-03): cel-shading, contorno y landing de portafolio
+
+Pedido del usuario: "que se vea más profesional y didáctico". Se acotó con preguntas a tres frentes: **personaje**, **escena** y **portafolio**. Decisiones tomadas:
+
+- El personaje **NO se remodela ni se regenera en Meshy**: se **estiliza**. Los defectos de la malla IA dejan de leerse como error y pasan a leerse como estilo.
+- La landing de portafolio SÍ se construye (la spec original la dejaba fuera): hero 3D a pantalla completa con el contenido debajo, en español y con proyectos reales.
+- Spec: `docs/superpowers/specs/2026-09-03-avatar-pro-landing-design.md` (133bf54). Fases: 1 look cel → 2 refactor a `export/lib/` + sonda → 3 landing → 4 móvil/rendimiento/docs.
+
+### Fase 1 — look cel (hecha, pendiente de aprobación)
+
+Archivos nuevos: `export/lib/toon.js`, `export/lib/postfx.js`, `tools/look_sweep.mjs`. El GLB **no cambia**: todo vive en `export/`, así que cero riesgo sobre rig, pesos, clips y landmarks.
+
+- **Por qué contorno por post-proceso y no inverted hull:** la malla tiene 8563 vértices de borde; un casco invertido saldría agujereado justo en la cara. El Sobel sobre profundidad + normales no depende de la topología, y de paso contornea escritorio, monitores y moto (eso es lo que unifica el look).
+- **Por qué el `?mat=toon` viejo viraba a morado:** no era el toon. Las luces de la escena son azules (key `0xcfe0ff`, ventana `0x8fb8ff`, hemisférica `0x33405c`) y un hoodie casi negro multiplicado por luz azul sin base ambiental da morado. `toonLights()` mete base ambiental cálida y vuelve la key neutra.
+- **RectAreaLight NO ilumina `MeshToonMaterial`** (solo Standard/Physical): la luz de la ventana pasa a `DirectionalLight`.
+- **La trampa que costó cuatro pasadas:** las puntuales de las pantallas están a ~0.5 m de la cara con decay 2 (intensidad efectiva ~6) y quemaban la piel a blanco puro. Se atenúan aparte en el visor (`LIT.screen` = 0.30, `LIT.bar` = 0.70 en modo cel), no en `toonLights`.
+- **Calibración final** (variante `u3` del barrido): ambiental 0.30, key 8, ventana 0.40, hemisférica 0.15, techo 3, `slit` 0.30, `blit` 0.70; contorno `thickness` 1.4 / `depthBias` 0.003 / `normalBias` 0.8; bloom umbral 2.5 fuerza 0.25; viñeta 1.05. `normalBias` por debajo de ~0.6 dibuja el RUIDO de la malla (pecas negras en la gorra); por encima de ~1.1 se pierden los pliegues.
+- **Todo el look es ajustable por query** para poder barrerlo sin editar código: `?fx=off` (look PBR anterior exacto), `?toon=0`, `?outline=0`, `?bloom=0`, `?vignette=0`, y los números `amb key win hemi ceil slit blit rim rimp thick dbias nbias ostr bloomstr bloomt vign exp`.
+- **`tools/look_sweep.mjs`**: abre el visor una vez por variante y guarda captura en `generated/renders/sweep/`. `--zoom` encuadra la cabeza. Es la herramienta que hizo posible calibrar.
+- **`__inkFrac` cambió de definición**: contar píxeles casi negros no sirve (la escena nocturna ya tiene ~58 % casi negro y la medida satura). Ahora mide densidad de LÍNEAS (píxeles más oscuros que sus dos vecinos a distancia 2, a escala 1:1 porque el contorno mide 1-1.5 px y al reducir la imagen se difumina).
+- **Sonda ampliada** (`tools/preview_probe.mjs`): afirma `fx.on`, 5 pases del composer, `lights >= 9` (antes exigía exactamente 9), y hace una segunda pasada con `?fx=off` para la comparativa A/B y para medir que el contorno pinta tinta (1.44 % vs 1.10 %). `PROBE OK`, `errors []`, headQ 0.256, neckQ 0.088.
+- Comparativas para el usuario: `generated/renders/fase1_escena_ab.png` y `fase1_cabeza_ab.png`.
+
+**Pendiente de la sesión 6:** aprobación de la fase 1; luego fases 2-4. El usuario debe entregar los 3-4 proyectos reales (nombre, línea, link) y los links de contacto para el bloque `DATA` de la landing.

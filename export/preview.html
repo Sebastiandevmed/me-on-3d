@@ -40,12 +40,35 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { applyToon, toonLights } from './lib/toon.js';
+import { createComposer } from './lib/postfx.js';
+
+// ---- look: cel-shading + contorno + bloom. ?fx=off vuelve al look PBR anterior completo,
+// y ?toon=0 / ?outline=0 / ?bloom=0 / ?vignette=0 apagan una pieza cada uno para comparar.
+const Q = new URLSearchParams(location.search);
+const flag = (n) => Q.get(n) !== '0' && Q.get(n) !== 'off';
+const FX = { on: flag('fx'), toon: flag('fx') && flag('toon'), outline: flag('fx') && flag('outline'),
+             bloom: flag('fx') && flag('bloom'), vignette: flag('fx') && flag('vignette') };
+// Todos los numeros del look son ajustables por query para poder barrerlos con la sonda sin
+// tocar el codigo: ?amb=.3&key=7&rim=.14&nbias=1.25&bloomt=1.05&exp=1.15 ...
+const num = (n, d) => (Q.has(n) ? parseFloat(Q.get(n)) : d);
+// Las puntuales de pantallas y barras estan a ~0.5 m de la cara. En toon pegan mucho mas
+// fuerte que en PBR (no hay rugosidad que reparta la energia ni entorno que compense) y
+// quemaban la piel a blanco puro: se atenuan solo en modo cel.
+const LIT = { screen: num('slit', FX.toon ? 0.30 : 1), bar: num('blit', FX.toon ? 0.70 : 1) };
+const LOOK = {
+  lights: { ambient: num('amb', undefined), key: num('key', undefined), window: num('win', undefined), hemi: num('hemi', undefined), ceil: num('ceil', undefined) },
+  rim: { strength: num('rim', undefined), power: num('rimp', undefined) },
+  fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), normalBias: num('nbias', undefined),
+        strength: num('ostr', undefined), bloomStrength: num('bloomstr', undefined), bloomThreshold: num('bloomt', undefined),
+        vignetteDarkness: num('vign', undefined) },
+};
 
 const info = document.getElementById('info');
 const status = { loaded: false, env: false, fps: 0, frames: 0, screen: 0, exclusive: null, clips: () => '',
   headQ: () => follow.head && follow.head.quaternion.toArray(), neckQ: () => follow.neck && follow.neck.quaternion.toArray(), chestQ: () => follow.chest && follow.chest.quaternion.toArray(), hpQ: () => follow.hp && follow.hp.quaternion.toArray(),
   barHex: () => bars[0] && bars[0].material.emissive.getHexString() }; window.__status = status; // para verificación headless
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: Q.has('pdb') });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
@@ -64,7 +87,7 @@ resetCamera(); document.getElementById('resetCam').onclick = resetCamera;
 
 // ---- luces. Coordenadas glTF (x, y, z) = Blender (x, z, -y).
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = num('exp', 1.15);
 RectAreaLightUniformsLib.init();
 const lights = [];
 const key = new THREE.SpotLight(0xcfe0ff, 40, 0, Math.PI / 3.4, 0.7, 2);   // key azulada desde arriba-izquierda, con sombra
@@ -75,14 +98,20 @@ key.shadow.camera.near = 0.5; key.shadow.camera.far = 12;
 scene.add(key, key.target); lights.push(key);
 const ceil = new THREE.PointLight(0xffe0c0, 6, 7, 2); ceil.position.set(0.6, 2.6, 0.2); scene.add(ceil); lights.push(ceil);   // calida del techo
 const win = new THREE.RectAreaLight(0x8fb8ff, 5, 3.2, 1.8); win.position.set(-0.3, 1.5, 1.7); win.lookAt(-0.3, 1.2, 0); scene.add(win); lights.push(win);
-scene.add(new THREE.HemisphereLight(0x33405c, 0x0b0b0e, 0.5));
+const hemi = new THREE.HemisphereLight(0x33405c, 0x0b0b0e, 0.5); scene.add(hemi);
 // luz de las pantallas (se enciende con el fundido) y de las barras RGB (siguen el ciclo de color)
 const SCREEN_POS = { screen_left: [-0.6, 0.95, -1.35], screen_center: [0, 0.95, -1.35], screen_right: [0.6, 0.95, -1.35], screen_laptop: [0, 0.9, -1.0] };
 const screenLights = {};
 for (const [n, p] of Object.entries(SCREEN_POS)) { const l = new THREE.PointLight(0xbfd4ff, 0, 2.2, 2); l.position.set(...p); scene.add(l); screenLights[n] = l; lights.push(l); }
 const barLights = [];
-for (const x of [-1.05, 1.05]) { const l = new THREE.PointLight(0x4090ff, 3, 4, 2); l.position.set(x, 1.3, 1.2); scene.add(l); barLights.push(l); lights.push(l); }
-status.lights = lights.length; status.shadows = true;
+for (const x of [-1.05, 1.05]) { const l = new THREE.PointLight(0x4090ff, 3 * LIT.bar, 4, 2); l.position.set(x, 1.3, 1.2); scene.add(l); barLights.push(l); lights.push(l); }
+if (FX.toon) toonLights(scene, { key, ceil, win, hemi }, LOOK.lights);   // ver lib/toon.js: +ambiental y +direccional de ventana
+status.lights = lights.length + (FX.toon ? 2 : 0); status.shadows = true;
+
+// Cadena de post-proceso. El contorno es lo que convierte el render en ilustracion; el bloom
+// solo prende monitores y barras RGB (umbral 0.85 en lineal).
+const composer = FX.on ? createComposer(renderer, scene, camera, { outline: FX.outline, bloom: FX.bloom, vignette: FX.vignette, ...LOOK.fx }) : null;
+status.fx = { ...FX, passes: composer ? composer.passes.length : 0 };
 
 new RGBELoader().load('night.hdr?v=' + Date.now(), (t) => { t.mapping = THREE.EquirectangularReflectionMapping; scene.environment = t; scene.environmentIntensity = 0.5; status.env = true; },
   undefined, (e) => console.error('night.hdr: ' + (e.message || e)));
@@ -95,7 +124,7 @@ const clock = new THREE.Clock();
 const mouse = { x: 0, y: 0 };
 window.__view = { camera, controls, THREE, follow: () => follow, browup: () => browup(), mouse };   // para sondas headless (encuadres de detalle)
 addEventListener('mousemove', e => { mouse.x = (e.clientX / innerWidth) * 2 - 1; mouse.y = -(e.clientY / innerHeight) * 2 + 1; });
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
 
 // ---- mezcla de clips ----
 // idle = base continua; typing y Blink se superponen (huesos disjuntos); browup se superpone a todo.
@@ -126,6 +155,25 @@ const playExclusive = (n) => {
 };
 const vibe = () => playExclusive('vibe');
 window.__vibe = vibe;   // para la sonda headless
+window.__inkFrac = () => {   // ?pdb=1: densidad de LINEAS de tinta (pixeles mas oscuros que sus dos vecinos).
+  // No sirve contar pixeles oscuros a secas: la escena es nocturna y ya tiene ~58 % casi
+  // negro, asi que esa medida satura y no distingue si el contorno esta pintando o no.
+  // A escala 1:1: el contorno mide 1-1.5 px y al reducir la imagen se difumina y deja de contarse.
+  const W = Math.min(1600, renderer.domElement.width), H = Math.round(W * renderer.domElement.height / renderer.domElement.width), D = 2, TH = 14;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(renderer.domElement, 0, 0, W, H);
+  const d = g.getImageData(0, 0, W, H).data;
+  const lum = new Float32Array(W * H);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) lum[j] = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+  let n = 0, tot = 0;
+  for (let y = D; y < H - D; y++) for (let x = D; x < W - D; x++) {
+    const v = lum[y * W + x]; tot++;
+    if ((v + TH < lum[y * W + x - D] && v + TH < lum[y * W + x + D]) ||
+        (v + TH < lum[(y - D) * W + x] && v + TH < lum[(y + D) * W + x])) n++;
+  }
+  return n / tot;
+};
 const browup = () => { const a = actions.browup; if (!a || a.isRunning()) return; playOnce('browup', 0.1, () => a.fadeOut(0.15)); };
 
 // ?v= evita el cache HTTP de Chrome: python http.server no manda Cache-Control y tras regenerar el GLB
@@ -143,6 +191,9 @@ loader.load('avatar.glb?v=' + Date.now(), (gltf) => {
     if (o.name === 'Body') character = o;
     if (o.isMesh && o.material && o.material.map) { o.material.map.anisotropy = renderer.capabilities.getMaxAnisotropy(); o.material.map.needsUpdate = true; }   // texturas nitidas en escorzo
   });
+  // Cel-shading. Pantallas y barras RGB quedan fuera: son paneles emisivos que el bucle de
+  // animacion muta y que alimentan el bloom. Conserva el `map` (y por tanto la anisotropia).
+  if (FX.toon) applyToon(gltf.scene, { rim: LOOK.rim });
   saveFollow();
   mixer = new THREE.AnimationMixer(gltf.scene);
   for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
@@ -264,9 +315,9 @@ function animate() {
   if (mixer) mixer.update(dt);
   saveFollow();
   applyHeadFollow(dt);
-  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); for (const [n, l] of Object.entries(screenLights)) l.intensity = 1.6 * k * k; }
+  if (screens.length) { const k = Math.max(0, Math.min(1, (performance.now() - screensOnAt) / 2000)); screens.forEach(s => s.material.emissiveIntensity = 2.5 * k * k); for (const [n, l] of Object.entries(screenLights)) l.intensity = 1.6 * LIT.screen * k * k; }
   bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; barLights[i] && barLights[i].color.copy(b.material.emissive); });
-  controls.update(); renderer.render(scene, camera);
+  controls.update(); if (composer) composer.render(dt); else renderer.render(scene, camera);
   frames++; status.frames++; status.exclusive = exclusive; status.screen = screens.length ? screens[0].material.emissiveIntensity : 0; const now = performance.now();
   if (now - fpsT > 500) { status.fps = Math.round(frames * 1000 / (now - fpsT)); frames = 0; fpsT = now;
     info.textContent = (status.loaded ? 'glb ok' : 'cargando glb…') + ' · hdr ' + (status.env ? 'ok' : '…') + ' · ' + status.fps + ' fps\nclips: ' + status.clips() + (exclusive ? '\nexclusivo: ' + exclusive : ''); }
