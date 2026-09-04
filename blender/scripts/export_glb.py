@@ -71,6 +71,7 @@ CHAR_IMAGE = 'character_texture_clean'   # nombre de la imagen del atlas dentro 
 # Con fmt='JPEG' el exportador convierte todo a JPEG salvo las imagenes con alfa (que conserva en
 # PNG); arriba ya se verifica que ninguna textura alimenta Alpha, asi que es seguro.
 LADDER = [
+    dict(fmt='JPEG', quality=CHAR_QUALITY, char=4096),   # atlas reempaquetado por repack_uvs.py (4096: 1.57x la densidad de Meshy)
     dict(fmt='JPEG', quality=CHAR_QUALITY, char=2048),
     dict(fmt='JPEG', quality=85, char=2048),
     dict(fmt='JPEG', quality=70, char=2048),
@@ -257,7 +258,7 @@ g, binbuf = gltf_json(OUT)
 imgs = image_info(g, binbuf)
 for name, mime, w, h, nb in imgs:
     print('EXPORT imagen', name, mime, f'{w}x{h}', nb, 'bytes')
-check(all(w <= 2048 and h <= 2048 for _, _, w, h, _ in imgs), 'imagenes <= 2048')
+check(all(w <= 4096 and h <= 4096 for _, _, w, h, _ in imgs), 'imagenes <= 4096')
 mats = {m.get('name'): m for m in g.get('materials', [])}
 for m in SCREENS:
     mm = mats.get(m, {})

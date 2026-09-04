@@ -16,10 +16,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy, common
 import numpy as np
 
-SRC = os.path.join(common.GEN, 'character_texture_logo.png')
+# Si repack_uvs.py ya corrio, la textura de partida es la horneada al UV nuevo (mismo contenido que
+# character_texture_logo.png pero en el layout con margen); si no, la del logo en el UV de Meshy.
+_REPACKED = os.path.join(common.GEN, 'character_texture_repacked.png')
+_LOGO = os.path.join(common.GEN, 'character_texture_logo.png')
+SRC = _LOGO   # main() cambia a _REPACKED si Body['uv_repacked'] esta puesto (no por existencia del archivo: puede ser de una corrida vieja)
 OUT = os.path.join(common.GEN, 'character_texture_clean.png')
-SIZE = 2048
-PAD = 16          # px de dilatado sobre los canales
+SIZE = 2048       # tamano por defecto; main() lo ajusta al de la textura de origen (4096 tras repack_uvs.py)
+PAD = 16          # px de dilatado sobre los canales con el layout de Meshy (islas a 2-4 px: mas no cabe)
+PAD_REPACKED = 32 # idem tras repack_uvs.py (islas grandes con margen: 32 cubre hasta el nivel 4 de mipmap)
+
+
+def pad_for(body):
+    """Ancho de dilatado que corresponde al layout UV actual de Body (lo usa tambien el check)."""
+    return PAD_REPACKED if body.get('uv_repacked') else PAD
 DARK = 0.25       # luminancia por debajo de la cual se aplica la mediana
 MEDIAN_PASSES = 2
 ROUGHNESS = 0.85
@@ -85,6 +95,12 @@ def median3(rgb):
 
 def main():
     common.ensure_dirs()
+    global SRC, PAD
+    if bpy.data.objects['Body'].get('uv_repacked'):
+        SRC = _REPACKED
+    PAD = pad_for(bpy.data.objects['Body'])
+    print('TEXCLEAN PAD', PAD)
+    print('TEXCLEAN textura de origen', os.path.basename(SRC))
     if not os.path.exists(SRC):
         common.fail(f'falta {SRC} (ejecutar apply_chest_logo.py antes)')
     body = bpy.data.objects['Body']
@@ -97,8 +113,10 @@ def main():
     w, h = src.size
     px = np.empty(w * h * 4, dtype=np.float32); src.pixels.foreach_get(px)
     img = px.reshape(h, w, 4)[::-1, :, :3]          # bpy guarda de abajo a arriba; se voltea a "arriba primero"
-    if (w, h) != (SIZE, SIZE):
-        common.fail(f'textura de origen {w}x{h}, esperada {SIZE}x{SIZE}')
+    global SIZE
+    if w != h or w < 2048:
+        common.fail(f'textura de origen {w}x{h}: se espera cuadrada y >= 2048')
+    SIZE = w
 
     # --- 2. mascara UV y dilatado
     mask = uv_mask(body, SIZE)

@@ -23,7 +23,7 @@ if abs(val('Specular IOR Level') - 0.5) > 1e-6: common.fail(f"Specular IOR Level
 img = bsdf.inputs['Base Color'].links[0].from_node.image
 if img is None or not img.filepath_raw.endswith('character_texture_clean.png'):
     common.fail(f'Base Color no apunta a character_texture_clean.png: {img and img.filepath_raw}')
-if tuple(img.size) != (2048, 2048): common.fail(f'textura limpia {tuple(img.size)} != 2048x2048')
+if img.size[0] != img.size[1] or img.size[0] < 2048: common.fail(f'textura limpia {tuple(img.size)}: se espera cuadrada y >= 2048 (4096 tras repack_uvs.py)')
 
 # la mascara de islas UV (blanco = dentro de isla, negro = hueco) la escribe fix_character_material.py;
 # se usa para medir la fuga de color piel SOLO en los huecos entre islas, no en toda la textura
@@ -62,11 +62,13 @@ print('CHECK_MAT skin_frac_gutter', round(gutter_frac, 4))
 # real, igual que el metodo global que se reemplaza aqui. Se aisla el relleno lejano dilatando la
 # mascara PAD veces (mismo PAD que usa fix_character_material.py) y se exige piel ~0 solo ahi.
 filled = mask_bool.copy()
-for _ in range(fcm.PAD):
+body = bpy.data.objects.get('Body')
+if body is None: common.fail('no hay malla Body')
+for _ in range(fcm.pad_for(body)):
     filled |= np.roll(filled, 1, 0) | np.roll(filled, -1, 0) | np.roll(filled, 1, 1) | np.roll(filled, -1, 1)
 far = gutter & ~filled
 far_frac = float(skin2d[far].mean()) if far.any() else 0.0
-print('CHECK_MAT skin_frac_far (mas alla de PAD =', fcm.PAD, 'px de cualquier isla)', round(far_frac, 4))
+print('CHECK_MAT skin_frac_far (mas alla de PAD =', fcm.pad_for(body), 'px de cualquier isla)', round(far_frac, 4))
 if far_frac > 0.01:
     common.fail(f'demasiado color piel en el relleno lejano ({far_frac:.4f} > 0.01): el dilatado no cubrio los canales')
 body = bpy.data.objects.get('Body')

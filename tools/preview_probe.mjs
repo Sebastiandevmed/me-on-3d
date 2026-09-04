@@ -34,7 +34,7 @@ await send('Page.enable'); await send('Runtime.enable');
 // avatar.glb / preview.html del cache HTTP y la sonda mide un modelo VIEJO (sintoma tipico:
 // hpQ null porque el GLB cacheado no tiene el hueso 'headphones').
 await send('Network.enable'); await send('Network.setCacheDisabled', { cacheDisabled: true });
-await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/preview.html` });
+await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/preview.html${process.env.PREVIEW_QUERY || ''}` });   // PREVIEW_QUERY="?mat=toon" para probar variantes
 const ev = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true }); return r.result?.result?.value; };
 const shot = async (name) => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(join(OUT, name), Buffer.from(r.result.data, 'base64')); console.log('PROBE shot', name); };
 const mv = (x, y) => ev(`dispatchEvent(new MouseEvent('mousemove',{clientX:${x},clientY:${y}}));1`);
@@ -43,7 +43,7 @@ let loaded = false;
 for (let i = 0; i < 60 && !loaded; i++) { await sleep(500); loaded = await ev('!!(window.__status && __status.loaded && __status.env)'); }
 await sleep(4500);                                  // intro (3 s) + fundido de pantallas
 await mv(720, 420); await sleep(1500);
-const status = await ev('JSON.stringify({loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
+const status = await ev('JSON.stringify({gpu:__status.gpu,loaded:__status.loaded,env:__status.env,fps:__status.fps,shadows:__status.shadows,lights:__status.lights,clips:__status.clips(),headQ:__status.headQ(),neckQ:__status.neckQ(),chestQ:__status.chestQ(),hpQ:__status.hpQ()})');
 console.log('PROBE status', status);
 const st = JSON.parse(status);
 await shot('preview_shot.png');
