@@ -17,9 +17,10 @@ for f in export/poster.jpg export/og.jpg; do
   [[ -f $f ]] || { echo "FALTA $f — generalo con:  node tools/make_poster.mjs" >&2; exit 1; }
 done
 
-rm -rf dist && mkdir -p dist/lib
+rm -rf dist && mkdir -p dist/lib dist/img
 cp export/index.html export/avatar.glb export/night.hdr export/poster.jpg export/og.jpg dist/
 cp export/lib/*.js dist/lib/
+cp export/img/*.webp dist/img/
 
 # Caches largas para lo que va con nombre estable y es pesado. Netlify y Cloudflare Pages leen
 # este archivo; en otro host hay que traducirlo a su forma (nginx, S3, ...).

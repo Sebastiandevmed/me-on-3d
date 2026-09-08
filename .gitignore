@@ -6,4 +6,4 @@ export/*.glb
 blender/*.blend
 __pycache__/
 tools/screens/logo.png
-dist/
+.claude/
