@@ -73,7 +73,7 @@ export function createAvatarScene(opts = {}) {
   const LOOK = {
     lights: { ambient: num('amb', undefined), key: num('key', undefined), window: num('win', undefined), hemi: num('hemi', undefined), ceil: num('ceil', undefined) },
     rim: { strength: num('rim', undefined), power: num('rimp', undefined) },
-    fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), normalBias: num('nbias', undefined),
+    fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), depthMin: num('dmin', undefined), normalBias: num('nbias', undefined),
           strength: num('ostr', undefined), ramp: num('oramp', undefined), bloomStrength: num('bloomstr', undefined),
           bloomThreshold: num('bloomt', undefined), vignetteDarkness: num('vign', undefined) },
   };

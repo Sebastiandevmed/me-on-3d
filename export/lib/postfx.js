@@ -43,7 +43,7 @@ const OUTLINE_FRAG = /* glsl */`
 uniform sampler2D tDiffuse, tNormal, tDepth;
 uniform vec2 texel;
 uniform float cameraNear, cameraFar;
-uniform float thickness, depthBias, normalBias, strength, ramp;
+uniform float thickness, depthBias, normalBias, strength, ramp, depthMin;
 uniform vec3 outlineColor;
 varying vec2 vUv;
 
@@ -57,11 +57,18 @@ void main() {
   vec4 base = texture2D(tDiffuse, vUv);
   vec2 o = texel * thickness;
   float dc = linearDepth(vUv);
-  float de = abs(linearDepth(vUv + vec2(o.x, 0.0)) - dc) + abs(linearDepth(vUv - vec2(o.x, 0.0)) - dc)
-           + abs(linearDepth(vUv + vec2(0.0, o.y)) - dc) + abs(linearDepth(vUv - vec2(0.0, o.y)) - dc);
+  float dR = abs(linearDepth(vUv + vec2(o.x, 0.0)) - dc), dL = abs(linearDepth(vUv - vec2(o.x, 0.0)) - dc);
+  float dU = abs(linearDepth(vUv + vec2(0.0, o.y)) - dc), dD = abs(linearDepth(vUv - vec2(0.0, o.y)) - dc);
+  float de = dR + dL + dU + dD;
   // Relativo a la profundidad: sin esto los objetos del fondo salen con un contorno mucho
   // mas grueso que los de delante, porque el mismo salto en metros pesa menos de cerca.
   de /= max(dc, 1e-4);
+  // Suelo ABSOLUTO en metros: un salto menor que depthMin no es un borde. Existe por la cascara
+  // interior de la cabeza (blender/scripts/add_gap_shell.py): las rendijas de la malla de Meshy
+  // ya no muestran negro sino piel 2.5-6 mm mas honda, y ese escalon, relativo a la
+  // profundidad, entintaba igual en primer plano. Un pliegue real (nariz, capucha, visera)
+  // salta 1 cm o mas.
+  if (max(max(dR, dL), max(dU, dD)) * (cameraFar - cameraNear) < depthMin) de = 0.0;
 
   vec4 ncs = nrm(vUv);
   vec3 nc = ncs.xyz;
@@ -99,6 +106,7 @@ class OutlinePass extends Pass {
         cameraNear: { value: camera.near }, cameraFar: { value: camera.far },
         thickness: { value: opts.thickness ?? 1.4 },
         depthBias: { value: opts.depthBias ?? 0.003 },
+        depthMin: { value: opts.depthMin ?? 0.008 },      // m: ver el shader; ?dmin= en el visor
         // Umbral BASE, el del cuarto (sens 1, de frente). El personaje lo recibe multiplicado
         // por 1/sens, asi que ya no hay que subirlo aqui para librarse de sus rayones.
         normalBias: { value: opts.normalBias ?? 0.8 },

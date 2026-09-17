@@ -29,6 +29,9 @@ step face_features;             $B blender/character.blend blender/scripts/face_
 # canaletas. texture_touchup y face_features solo pintan DENTRO de los triangulos, asi que sin
 # esto las canaletas conservan el color de antes del repintado y salen como rayas claras.
 step redilate_texture;          $B blender/character.blend blender/scripts/redilate_texture.py
+# Cascara interior de la cabeza (tapa las rendijas de la malla de Meshy con la misma textura).
+# Va con la textura terminada y ANTES de smooth_normals, que le da a la cascara las normales de la piel.
+step add_gap_shell;             $B blender/character.blend blender/scripts/add_gap_shell.py
 step smooth_normals;            $B blender/character.blend blender/scripts/smooth_normals.py
 step check_rig;                 $B blender/character.blend blender/scripts/checks/check_rig.py
 step check_face_export;         $B blender/character.blend blender/scripts/checks/check_face_export.py
