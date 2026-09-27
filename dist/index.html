@@ -84,9 +84,12 @@ section{padding:14svh clamp(1.5rem,5vw,5rem)}
 /* Velo de legibilidad: no es una tarjeta, es la oscuridad del propio cuarto densificada
    hacia el borde donde se lee. Va anclado a la SECCION, no a la columna: con inset negativo
    en vw se salia del viewport y metia 356 px de desborde horizontal en movil (lo cazo
-   tools/landing_probe.mjs). */
+   tools/landing_probe.mjs).
+   Empieza en 55% y llega a 72% (antes era 46% -> 90%): la mitad derecha ya no se apaga y
+   la luz de la ventana y las barras RGB siguen leyendose; la columna de texto (derecha)
+   conserva oscuridad de sobra para el blanco. */
 .escena::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
-  background:linear-gradient(90deg,transparent 0%,transparent 46%,color-mix(in srgb,var(--noche) 70%,transparent) 66%,color-mix(in srgb,var(--noche) 90%,transparent) 100%)}
+  background:linear-gradient(90deg,transparent 0%,transparent 55%,color-mix(in srgb,var(--noche) 45%,transparent) 76%,color-mix(in srgb,var(--noche) 72%,transparent) 100%)}
 /* En el plan B el hero lleva su propio velo (::after, mas abajo): dos velos encima del poster
    lo apagaban del todo. */
 body[data-3d="none"] .escena::before{display:none}

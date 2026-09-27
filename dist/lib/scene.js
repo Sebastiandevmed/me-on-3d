@@ -18,6 +18,7 @@ import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUnifo
 import { applyToon, toonLights } from './toon.js';
 import { createComposer } from './postfx.js';
 import { applyWindowGlass } from './glass.js';
+import { addGraffiti } from './graffiti.js';
 
 // Camara de aprobacion de la sesion 2: Blender (-1.3, 3.7, 1.95) mirando a (0, 0.6, 1.0).
 // Lente 35 mm ~ 38 grados verticales.
@@ -73,7 +74,7 @@ export function createAvatarScene(opts = {}) {
   const LOOK = {
     lights: { ambient: num('amb', undefined), key: num('key', undefined), window: num('win', undefined), hemi: num('hemi', undefined), ceil: num('ceil', undefined) },
     rim: { strength: num('rim', undefined), power: num('rimp', undefined) },
-    fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), normalBias: num('nbias', undefined),
+    fx: { thickness: num('thick', undefined), depthBias: num('dbias', undefined), depthMin: num('dmin', undefined), normalBias: num('nbias', undefined),
           strength: num('ostr', undefined), ramp: num('oramp', undefined), bloomStrength: num('bloomstr', undefined),
           bloomThreshold: num('bloomt', undefined), vignetteDarkness: num('vign', undefined) },
   };
@@ -155,7 +156,7 @@ export function createAvatarScene(opts = {}) {
   const draco = new DRACOLoader(); draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/gltf/');
   const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
 
-  let mixer = null, actions = {}, screens = [], bars = [], character = null, glass = null;
+  let mixer = null, actions = {}, screens = [], bars = [], character = null, glass = null, graffiti = null;
   const clock = new THREE.Clock();
   const mouse = { x: 0, y: 0 };
   const ray = new THREE.Raycaster();
@@ -211,6 +212,16 @@ export function createAvatarScene(opts = {}) {
       bandStrength: num('gband', undefined), fresnelStrength: num('gfres', undefined),
     });
     status.glass = !!glass;
+    // Grafiti del nombre con paneles de neon (lib/graffiti.js). Va fuera de gltf.scene y despues
+    // de applyToon: la calcomania es Standard a proposito (emisivo propio para el bloom).
+    // ?graffiti=0 lo quita; ?gwall=back lo pasa a la pared trasera; ?gglow= ?glit= ?gsize= calibran.
+    graffiti = Q.get('graffiti') === '0' ? null : addGraffiti(scene, {
+      base: BASE_URL, ver: VER, wall: Q.get('gwall') || 'side',
+      size: num('gsize', undefined), glow: num('gglow', undefined), light: num('glit', undefined),
+      maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
+    });
+    status.graffiti = graffiti ? graffiti.wall : null;
+    if (graffiti) status.lights += graffiti.lights.length;
     saveFollow();
     mixer = new THREE.AnimationMixer(gltf.scene);
     for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
@@ -357,6 +368,7 @@ export function createAvatarScene(opts = {}) {
       for (const l of Object.values(screenLights)) l.intensity = 1.6 * LIT.screen * k * k;
     }
     bars.forEach((b, i) => { const h = (t * 0.05 + i * 0.5) % 1; b.material.emissive.setHSL(0.55 + 0.1 * Math.sin(h * Math.PI * 2), 0.9, 0.55); b.material.emissiveIntensity = 4; barLights[i] && barLights[i].color.copy(b.material.emissive); });
+    if (graffiti) graffiti.update(dt, t);
     for (const cb of frameCbs) cb(dt, t);          // la landing mueve aqui la camara
     if (controls) controls.update(); else camera.lookAt(camTarget);
     if (composer) composer.render(dt); else renderer.render(scene, camera);
@@ -369,6 +381,7 @@ export function createAvatarScene(opts = {}) {
     THREE, renderer, scene, camera, controls, composer, status, follow, mouse, actions,
     get character() { return character; },
     get glass() { return glass; },
+    get graffiti() { return graffiti; },
     camTarget,
     vibe, browup, playExclusive, resetCamera, setMouse, setSize, inkFrac,
     onFrame(cb) { frameCbs.push(cb); return () => { const i = frameCbs.indexOf(cb); if (i >= 0) frameCbs.splice(i, 1); }; },
