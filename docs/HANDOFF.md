@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-04 (sesión 9: las rayas negras intermitentes las pintaba el término de normales del contorno sobre el ruido de la malla de Meshy; arreglado con sensibilidad a tinta POR OBJETO en la alfa del buffer de normales + corrección de escorzo. Quedan motas horneadas en el atlas, ver "Sesión 9". Antes — sesión 8: la CARA. Tres bugs de textura encontrados y arreglados —rellenábamos la barba de Meshy sobre una premisa falsa, un bug de espacio de color que ponía el labio rojo, y las canaletas del atlas sin re-dilatar tras el repintado. Todos los checks pasan y el GLB está re-exportado; ver "Sesión 8". LA LANDING SIGUE SIN EMPEZAR: solo existe export/lib/camera-path.js. Pendiente del usuario: capturas de PipeBot (refs/pipebot/CAPTURAS.md) y links de contacto)
+**Última actualización:** 2026-09-27 (sesión 13, rama `calidad-avatar`: el grafiti pasó a ser una pieza 3:2 de 2.4 m que cubre la pared lateral de punta a punta y tiene RELIEVE real (capas apiladas de 6 cm + sombra de contacto + contorno cel recortado por la silueta, ver "Sesión 13"); el pre-pase del contorno acepta ahora `userData.outlineMaterial` / `userData.outline === false` por malla; encuadre vertical del hero rehecho para la pieza ancha. Antes — sesión 12: grafiti cuadrado + neones; sesión 11: cáscara interior contra las grietas. Pendiente del usuario: capturas de PipeBot, links de contacto, dominio)
 
 ## Cómo retomar
 
@@ -619,3 +619,255 @@ Capturas: `generated/renders/landing_hibrido_*.png`, `landing_hibrido_movil_*.pn
 - **Publicar.** Resuelto a medias: `tools/build_site.sh` arma `dist/` (4.4 MB) con el GLB copiado
   explícitamente y un `_headers` de cachés, listo para arrastrar a Netlify o Cloudflare Pages.
   Queda decidir el dominio y cambiar el `<link rel="canonical">`.
+
+## Sesión 11 (2026-09-17) — quiebres negros y definición: cáscara interior + atlas de cabeza a 2×
+
+**Reporte del usuario:** "aún sigo viendo quiebres negros y mucho menos definición en la página
+que en el archivo original". Rama nueva `calidad-avatar` (sale de `ajuste-velo-camara`, que tenía
+cambios SIN commitear de la sesión del 2026-09-08: velo más suave en `export/index.html`, cámaras
+más cerca en `camera-path.js`, `tools/diag_velo.mjs` y `docs/PREGUNTAS_CLIENTE.*`. Siguen sin
+commitear; no son de esta sesión y no se evaluaron).
+
+### Diagnóstico (primer plano de la cara en el visor real, `tools/face_shot.mjs`, cuatro variantes)
+
+| variante | rayas negras finas en mejilla / frente / sien |
+|---|---|
+| look actual | sí |
+| `?outline=0` | sí |
+| `?toon=0` | sí |
+| `?fx=off` (PBR, sin composer) | **sí, en gris** |
+
+O sea: geometría, no sombreado ni contorno ni textura. `close_gaps.py` cierra rendijas de hasta
+3 mm; medido sobre `character.blend` DESPUÉS de ese paso, de los 479 vértices de borde de la
+cara que miran al frente, el 46 % tiene su borde vecino a 3-10 mm (`SNAP` a 4 mm ya mellaba la
+visera, sesión 5). Con `FrontSide` se ve a través de la cabeza hasta el fondo del cuarto.
+Capturas: `generated/renders/cara_diag_{actual,outline_0,toon_0,fx_off,fx_off_shadow_off}.png`.
+
+Sobre "definición": la textura de partida sigue siendo Meshy a 2048 (≈1 téxel/mm) y la cabeza
+iba con la MISMA densidad que el hoodie (1.5 téxeles/mm a 4096) aunque en pantalla se magnifica
+3-8×; en el hero a 1440 px la cabeza mide ~120 px, ahí el límite no es la textura sino el
+cel-shading de 3 bandas + el contorno + el velo. No se tocó el look (decisión del usuario, sesión 6).
+
+### Arreglo 1 — `blender/scripts/add_gap_shell.py` (nuevo; va tras `redilate_texture.py` y antes de `smooth_normals.py`)
+
+Cáscara interior CERRADA bajo la piel de la cabeza. Lo que NO funcionó, para no repetirlo:
+
+- **Duplicado hundido de la propia malla**: tendría las mismas rendijas; de frente se ve a través
+  de las dos.
+- **Remallado por voxels de la cabeza tal cual**: la malla es abierta y OpenVDB la convierte en
+  bandas finas sueltas alrededor de cada isla; no une nada (5296 tris para toda la cabeza).
+  Hay que darle GROSOR antes (Solidify 4 mm hacia dentro): cada isla se vuelve una losa cerrada
+  y el remallado a 4 mm une las losas vecinas.
+- **Filtrar por "punto más cercano de Body"**: en la frente bajo la visera el punto más cercano
+  es la visera, no la piel → la cáscara salía a parches justo donde más rendijas hay (cobertura
+  ~50 %). Se cambió por RAYOS: cada vértice se ajusta a exactamente `OFFSET` 2.5 mm bajo la piel
+  (rayo hacia fuera por su normal; si no pega, rayo hacia dentro por si asomaba), los que no ven
+  piel (están bajo una rendija) se relajan hacia sus vecinos, y una cara sobrevive si desde su
+  centro o alguno de sus vértices hay piel frontal encima entre 1.2 y 9 mm (con el centro solo se
+  perdían las caras bajo las rendijas, que son las que importan).
+
+Después: decimado a 7000 tris, UV y pesos por `DATA_TRANSFER` (cara más cercana interpolada,
+o sea que por la rendija se ve la misma piel/barba/gorra), y `join` a Body (mismo material y
+misma sensibilidad a tinta). Unir descarta las normales personalizadas → borra
+`Body['normals_smoothed']` y `smooth_normals.py` se repite; la cáscara recibe así las normales de
+la piel exterior y no se nota un cambio de sombreado en la rendija. **Medida propia** (impresa en
+cada corrida, falla si < 60 %): desde cada vértice de borde de la cara, rayo hacia dentro por su
+normal alisada, ¿hay cáscara a < 15 mm? → 0-3 mm 82 %, 3-5 mm 92 %, 5-10 mm 96 %, 10-20 mm 94 %.
+Renders de control con material plano: `gapshell_before.png`, `gapshell_shell.png` (la cáscara
+sola: tiene que verse una cabeza casi entera), `gapshell_after.png`. `check_rig.py` sube el
+presupuesto a 48 000 tris (personaje 46 364).
+
+### Arreglo 2 — `depthMin` en `export/lib/postfx.js` (`?dmin=`, 8 mm por omisión)
+
+Con la cáscara, la rendija ya no muestra negro pero sí un ESCALÓN de profundidad de 2.5-6 mm, y
+el término de profundidad del contorno (relativo a la distancia) lo entintaba igual en primer
+plano: `cara_shell_v2_dmin0.png` contra `cara_shell_v2.png`. Ahora un salto menor de `depthMin`
+metros (máximo de los 4 vecinos × (far − near)) no cuenta como borde. Un pliegue real (nariz,
+capucha, visera, monitor sobre escritorio) salta ≥ 1 cm; `preview_shot.png` sale con los mismos
+contornos de cuarto y silueta que antes, `INK` 2.11 % (antes 2.16 %).
+
+### Arreglo 3 — `HEAD_SCALE = 2.0` en `repack_uvs.py`
+
+Tras `smart_project`, las islas UV cuya mayoría de área 3D queda sobre la base del cuello (islas
+ENTERAS por conectividad UV; escalar caras sueltas rasgaría la isla) se escalan ×2 y se vuelve a
+empaquetar con `pack_islands` (rotación, `CONCAVE`, mismo margen). Sorpresa útil: `pack_islands`
+empaqueta mucho mejor que `smart_project` (48 % de cobertura frente a 36.6 %), así que la cabeza
+pasa de 0.753 a **1.257** veces la densidad de Meshy y el cuerpo NO pierde (0.762). La escala se
+imprime por separado y el tope mínimo (0.6) solo aplica al cuerpo. Barrido en `--probe`: ×1.7 →
+1.13/0.80; ×2.4 → 1.39/0.71. No hay más detalle REAL que el de Meshy a 2048: lo que gana la cabeza
+es que los bordes piel/gorra/barba y lo repintado por `face_features.py` salen menos dentados.
+Para detalle de verdad, la opción sería un upscale IA del atlas (Higgsfield, cuesta créditos:
+preguntar antes) o remodelar.
+
+### Reconstrucción y verificación
+
+`tools/rebuild_character.sh` completo (incluye ya `add_gap_shell`; unos 15 min, `texture_touchup`
+es el paso lento) → `REBUILD OK`. GLB **4044 KB / 56 500 tris** (Body 43 884) / 7 clips / atlas
+4096. `FACE OK`, `INK OK`, `PROBE OK errors []`, `LANDING OK` (60 fps). Comparar
+`cara_diag_actual.png` (antes) con `cara_v3_head2x.png` (después) y `cara_v3_head2x_browup.png`.
+Copia de seguridad de los .blend y GLB anteriores: solo en el scratchpad de la sesión (se borra).
+
+### Lo que NO se hizo
+
+- **`dist/` no se regeneró** ni se publicó: `tools/build_site.sh` copiaría el `export/index.html`
+  con los cambios de velo/cámara sin commitear de la sesión anterior. Decidir primero qué hacer
+  con esa rama; luego `tools/build_site.sh` + commit de `dist/` en `main` (GitHub Pages).
+- Quedan motas horneadas en sien y mentón (sesión 9) y una raya gris tenue junto a la nariz;
+  ninguna es negra ya.
+
+## Sesión 12 (2026-09-27) — el nombre grafiteado en la pared, con paneles de neón
+
+Pedido del usuario: que su nombre no se vea "plano" sino grafiteado, wildstyle a full, con
+paneles de neón, "muy urbano y característico de Medellín", pintado en el espacio libre de la
+pared junto a la ventana. Flujo acordado: 3 candidatos en Higgsfield → él escoge → se lleva a
+la web como código.
+
+### Imagen (Higgsfield, `generated/graffiti/`)
+
+- Saldo real al empezar: **1000 créditos, plan Plus** (la memoria decía 24-54; ya no aplica el
+  "no gastar sin preguntar" por saldo, pero sigue siendo cortesía avisar). Gasto de la sesión:
+  **11 créditos** (3 candidatos + 1 edición, `gpt_image_2_5` calidad high 2k 1:1 = 2.75 c/u).
+  Anotado en `generated/credits.log`.
+- Candidatos: `cand1_wildstyle_gradiente` (magenta→naranja→cian, flores de silletero),
+  `cand2_neon_tubos` (cromo/violeta, contorno de neón rosa, paneles cian, Metrocable, colibrí),
+  `cand3_cromo_skyline` (cromo, filos tricolor, skyline). **Elegido: 2**, editado con la misma
+  imagen como referencia para quitar los textos "COMUNA 13" (el colibrí y la corona se quedan):
+  `cand2b_sin_comuna13.png` (2048², insumo irremplazable, fuera de git como el resto de
+  `generated/`). Truco que funcionó a la primera: pedir la edición enumerando TODO lo que debe
+  quedar igual y solo después lo que se quita.
+- Textura web: `export/img/graffiti.webp` (1536², q86, 455 KB). Sí va en git y `build_site.sh`
+  ya la copia (`img/*.webp`).
+
+### Integración: `export/lib/graffiti.js` (nuevo), enganchado en `scene.js`
+
+Cero cambios en Blender ni en el GLB. Todo vive en el visor:
+
+- **Pared:** la lateral +X (glTF), la que queda a la IZQUIERDA de la cámara del hero: es el muro
+  vacío grande junto a la ventana. Se probó también la franja de la pared trasera bajo la
+  repisa (`?gwall=back`): sale diminuta y tapada por el personaje y la barra RGB
+  (`generated/renders/sweep/g_back.png` contra `g_side2.png`). Pieza de 1.6 m centrada en
+  (2.045, 1.18, 0.42); a 1.9 m y más alta se salía del encuadre por arriba (`g_side.png`).
+- **Calcomanía:** plano `MeshStandardMaterial` (NO toon, a propósito: necesita emisivo propio
+  > 2.5 lineal para el bloom) con tres texturas calculadas en canvas al cargar la imagen:
+  `map` = la imagen; `emissiveMap` = solo píxeles saturados Y claros (los tubos rosa del
+  contorno y los paneles cian pintados; el cromo y el muro salen negros) a intensidad 3.0;
+  `alphaMap` = pintura opaca / muro de la imagen transparente. **Por qué el alpha:** en la
+  primera captura la pieza se leía como un póster (rectángulo más oscuro que la pared, porque el
+  toon de la pared nunca baja del 35 % y un Standard sí). Con el fondo transparente las letras
+  quedan sobre la pared REAL con su luz. La máscara va en dos pasos porque los contornos negros
+  son tan oscuros como el muro y con un umbral a secas se hacían agujeros: máscara desenfocada
+  (radio 1.2 % del lado) que tapa lo que está pegado a pintura clara, más borde difuminado.
+- **Neón físico:** dos tubos cian verticales flanqueando la pieza y un panel magenta encima,
+  con soportes, emisivos a ~3.7-4 (respiran / parpadean levemente en `update`) y una
+  `PointLight` cada uno (cian 0.6, magenta 0.8). A 1.4 el cian lavaba las letras a lila.
+- Interruptores: `?graffiti=0`, `?gwall=side|back`, `?gsize= ?gglow= ?glit=`. `status.graffiti`
+  dice la pared; `status.lights` suma las 3 puntuales (la sonda exige ≥ 9, sigue OK).
+
+### Verificación
+
+`node tools/look_sweep.mjs` (capturas `sweep/g_*.png`), `node tools/landing_probe.mjs` →
+`LANDING OK` 60 fps, 5 secciones escritorio + vertical, plan B, sin errores;
+`node tools/preview_probe.mjs` → `PROBE OK errors []`. `node tools/make_poster.mjs` regenerado:
+`poster.jpg` y `og.jpg` ya traen el grafiti. Capturas de aprobación:
+`generated/renders/landing_hibrido_hero.png` y `landing_hibrido_sobreMi.png`.
+
+### Pendiente / decisiones abiertas
+
+- **El `<h1>` "Sebastián Escobar" sigue en el hero**, así que el nombre sale dos veces (pared y
+  texto). El pedido original era "en vez de plano"; decidir si el h1 se reduce a un subtítulo,
+  se vuelve `sr-only` (accesibilidad/SEO) o se queda. → Resuelto en la sesión 13: sr-only.
+- **Encuadre vertical del hero (hecho, segundo pedido de la sesión; REHECHO en la sesión 13
+  para la pieza ancha):** de frente el grafiti no
+  entraba en cuadro (a 375 px el fov horizontal es de ~28°). Ahora `hero.movil` pone la cámara
+  en la esquina delantera izquierda mirando en diagonal hacia +X: `pos (-1.75, 1.25, -2.95)`,
+  `target (1.0, 0.30, 0.2)`, fov 58. Grafiti entero a la izquierda, personaje de perfil a la
+  derecha, todo en el 40 % superior que deja libre la columna de texto. Se eligió entre 12
+  variantes capturadas con un script de scratchpad (copias en `generated/renders/sweep/movil_*.png`;
+  H3 es la elegida). Un intento de frente con más fov (A-F) metía medio techo y cortaba ambos.
+- Publicado: commits de la sesión en `calidad-avatar` (incluidos los cambios de velo/cámara y el
+  cuestionario de cliente que venían sin commitear), `main` avanzada por fast-forward y
+  `dist/` regenerado con `tools/build_site.sh`; el push a `main` dispara el workflow de Pages.
+- **Trampa de GitHub Pages (arreglada):** el primer push a `main` falló con "Branch main is not
+  allowed to deploy to github-pages due to environment protection rules": el entorno
+  `github-pages` tenía una política de ramas personalizada que solo permitía `landing-hibrido`
+  (de cuando se probó Pages desde esa rama). Se añadió `main` con
+  `gh api -X POST repos/Sebastiandevmed/me-on-3d/environments/github-pages/deployment-branch-policies -f name=main -f type=branch`
+  y se relanzó el run. Sitio vivo: https://sebastiandevmed.github.io/me-on-3d/
+
+## Sesión 13 (2026-09-27) — el grafiti cubre todo el muro y tiene relieve
+
+Pedido del usuario (con captura del sitio vivo): "¿puedes estirar el graffiti hasta el final del
+muro? También me gustaría que se viera más 3D, menos plano".
+
+### Imagen ancha (Higgsfield, 5.5 créditos, saldo antes 989)
+
+- `gpt_image_2_5` high 2k **3:2**, con `cand2b_sin_comuna13.png` como referencia y el truco de la
+  sesión 12 (enumerar TODO lo que se conserva y al final lo que cambia: "las dos líneas se
+  ESTIRAN hasta los bordes, más paneles cian repartidos"). Dos variantes: `generated/graffiti/
+  wide_a.png` (**elegida**: letras de borde a borde, 5 paneles) y `wide_b.png` (6 paneles, más
+  margen). 2048×1360 cada una. La cuadrada anterior quedó en `generated/graffiti/
+  graffiti_cuadrado_v1.webp` por si hay que volver.
+- Textura web: `export/img/graffiti.webp` ahora 2048×1360 q80, 533 KB (antes 1536² 455 KB).
+
+### Colocación: de punta a punta de la pared lateral
+
+`WALLS.side` en `graffiti.js`: `size` ahora es la ALTURA (1.6 m) y el ancho sale del aspecto de
+la imagen (3:2 → 2.4 m). Centro `(2.045, 1.18, 0.12)` → la pieza va de z = -1.08 a 1.32. La
+pared +X va de z = -4 (detrás de la cámara) a 1.445 (esquina con la ventana); desde la cámara del
+hero de escritorio (fov horizontal ≈ 62°) el borde izquierdo del cuadro corta la pared en
+z ≈ -1.1, así que la pieza arranca justo donde termina lo visible y muere a 12 cm de la esquina.
+Los tubos cian van en los extremos (`gap` 0.08 → z = -1.28 y 1.40; el de la esquina cabe por
+2 cm) y el panel magenta mide el 80 % del ancho, con tres soportes.
+
+### Relieve: "sprite stacking" + sombra + contorno cel recortado
+
+- **Pila de 15 planos** (`graffiti_layer_0..13` + `graffiti_decal`) con la misma silueta, de la
+  pared (6 mm) hacia el cuarto hasta **6 cm** (`?gdepth=`, 0 = calcomanía plana de antes). Las
+  capas de abajo llevan la imagen con tinte oscuro (`0x2a2530`) y `alphaTest 0.5` (recorte sin
+  mezcla → se ordenan solas por profundidad); la de arriba es la de siempre (mapa + emisivo +
+  alpha difuminado, `alphaTest 0.1`). En escorzo asoman los lados oscuros y las letras se leen
+  como bloques que salen del muro. 14 capas y no 8 porque con menos el colibrí y los paneles
+  mostraban "escalera" en primer plano (`generated/renders/graffiti_relieve_escorzo.png`).
+- **Sombra de contacto** (`graffiti_shadow`): silueta desenfocada (1.4 % del lado) y corrida
+  2 % hacia abajo, negra al 75 %, pegada al muro (3 mm) bajo la pila.
+- **Contorno cel:** primero salió dibujado el RECTÁNGULO del plano. Causa: el pre-pase de
+  `OutlinePass` (postfx.js) cambia TODOS los materiales por un `MeshNormalMaterial` sin máscara,
+  así que el plano entero escribía profundidad a 6 cm (> `depthMin` 8 mm). Arreglo en dos
+  partes: `_swapMaterials` respeta ahora `mesh.userData.outlineMaterial` (material propio para el
+  pre-pase) y `mesh.userData.outline === false` (la malla se esconde en el pre-pase; lo usa la
+  sombra); y `graffiti.js` da a la pila un `ShaderMaterial` equivalente al de normales pero
+  recortado por la misma máscara (`normalCutout`; `MeshNormalMaterial` no admite `alphaMap`,
+  avisó con un warning). Resultado: la tinta sigue el borde de las letras en relieve
+  (`?gink=`, 0.6 por omisión).
+- Suelo de ruido en la máscara alpha (`smooth(0.15, 0.40, m)`): el grano claro del muro pintado
+  daba alphas de 0.1-0.3 que antes se mezclaban invisibles y ahora escribirían profundidad.
+
+### Encuadre vertical rehecho
+
+Con 2.4 m de pieza el `hero.movil` de la sesión 12 mostraba media pieza cortada. Nuevo:
+`pos (-1.90, 1.25, -3.80)`, `target (0.67, 0.12, -0.74)`, fov 60 (cámara al fondo del cuarto, en
+la esquina delantera izquierda, mirando 40° hacia +X). Grafiti entero arriba a la izquierda
+(solo la punta de la flecha de la S sale del cuadro), personaje de perfil a la derecha, el h1
+apenas roza las gotas de abajo. Elegido entre 4 variantes con `tools/hero_shot.mjs` (nuevo:
+hero escritorio + vertical + dos primeros planos del grafiti en ~40 s, a `generated/renders/
+sweep/hero_*.png`).
+
+### Verificación
+
+`node tools/landing_probe.mjs` → `LANDING OK` (60 fps, 5 secciones, sin desborde, plan B ok);
+`node tools/preview_probe.mjs` → `PROBE OK errors []`; `node tools/make_poster.mjs` → poster y og
+regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de aprobación:
+`generated/renders/landing_hibrido_hero.png`, `landing_hibrido_movil_hero.png`,
+`graffiti_relieve_close.png`, `graffiti_relieve_escorzo.png`.
+
+### Pendiente / abierto
+
+- **h1 del hero (resuelto, tercer pedido de la sesión):** el usuario pidió quitar el "Sebastián
+  Escobar" en texto plano blanco. El `<h1>` se queda en el HTML pero visualmente oculto (clip
+  de 1 px, el patrón sr-only) para no perder el encabezado de la página en lectores de pantalla y
+  buscadores; el nombre lo pone solo el grafiti. En el plan B sin WebGL el póster ya trae la
+  pared con el nombre. Capturas: `generated/renders/sweep/hero_desk_sinh1.png` y
+  `hero_movil_sinh1.png`.
+- En primer plano extremo (a < 1 m) la pila deja ver escalones en los bordes de los paneles
+  cian y el colibrí; desde cualquier cámara de la landing no se nota. Si molesta: más capas
+  (`LAYERS`) o menos profundidad (`?gdepth=0.04`).
