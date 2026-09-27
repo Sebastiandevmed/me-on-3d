@@ -22,7 +22,7 @@ export const CAMERA_STATES = {
   // grafiti no entraba en cuadro: con 375 px de ancho el fov horizontal es de ~28 grados.
   // Elegido con capturas (scratchpad movil_hero.mjs, variantes A-I y H2/H3).
   hero:      { pos: [-1.35, 1.90, -3.25], target: [0.00, 1.00, -0.60], fov: 41,
-               movil: { pos: [-1.75, 1.25, -2.95], target: [1.00, 0.30, 0.20], fov: 58 } },
+               movil: { pos: [-1.90, 1.25, -3.80], target: [0.67, 0.12, -0.74], fov: 60 } },
   // Retrato 3/4: el personaje se va al tercio izquierdo y deja sitio a la columna de texto.
   sobreMi:   { pos: [-0.95, 1.62, -2.15], target: [-0.10, 1.30, -0.35], fov: 34,
                movil: { pos: [-0.80, 1.66, -2.10], target: [-0.05, 0.95, -0.35], fov: 48 } },
