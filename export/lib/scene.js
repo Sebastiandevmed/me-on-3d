@@ -214,10 +214,10 @@ export function createAvatarScene(opts = {}) {
     status.glass = !!glass;
     // Grafiti del nombre con paneles de neon (lib/graffiti.js). Va fuera de gltf.scene y despues
     // de applyToon: la calcomania es Standard a proposito (emisivo propio para el bloom).
-    // ?graffiti=0 lo quita; ?gwall=back lo pasa a la pared trasera; ?gglow= ?glit= ?gsize= calibran.
+    // ?graffiti=0 lo quita; ?gwall=back lo pasa a la pared trasera; ?gglow= ?glit= ?gsize= ?gdepth= ?gink= calibran.
     graffiti = Q.get('graffiti') === '0' ? null : addGraffiti(scene, {
       base: BASE_URL, ver: VER, wall: Q.get('gwall') || 'side',
-      size: num('gsize', undefined), glow: num('gglow', undefined), light: num('glit', undefined),
+      size: num('gsize', undefined), glow: num('gglow', undefined), light: num('glit', undefined), depth: num('gdepth', undefined), ink: num('gink', undefined),
       maxAnisotropy: renderer.capabilities.getMaxAnisotropy(),
     });
     status.graffiti = graffiti ? graffiti.wall : null;

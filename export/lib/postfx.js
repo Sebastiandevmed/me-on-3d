@@ -93,6 +93,7 @@ class OutlinePass extends Pass {
     // `sensitivity(mesh)` la decide; el visor la usa para bajarsela a las mallas de Meshy.
     this.sensitivity = opts.sensitivity ?? (() => 1);
     this.normalMaterials = new Map();   // sens redondeada -> MeshNormalMaterial con esa opacity
+    this.hidden = [];                   // mallas escondidas durante el pre-pase (userData.outline === false)
     this.swapped = [];
     // LinearFilter en el buffer de normales: cada muestra promedia sus cuatro texeles, lo que
     // atenua el ruido de un pixel de ancho sin tocar los pliegues, que ocupan varios. La
@@ -136,15 +137,23 @@ class OutlinePass extends Pass {
   }
   // scene.overrideMaterial no sirve aqui: es UN material para toda la escena y necesitamos una
   // alfa distinta por malla. Se intercambian y se restauran alrededor del pre-pase.
+  // Dos excepciones por malla via userData: `outlineMaterial` es un material propio para el
+  // pre-pase (el grafiti lo usa para recortar sus planos con la mascara alpha: sin esto el
+  // plano entero escribia profundidad y salia dibujado el RECTANGULO) y `outline: false` la
+  // esconde del pre-pase (calcomanias que no deben marcar borde ni normal).
   _swapMaterials() {
-    this.swapped.length = 0;
+    this.swapped.length = 0; this.hidden.length = 0;
     this.scene.traverse((o) => {
       if (!o.isMesh || !o.material) return;
+      if (o.userData.outline === false) { if (o.visible) { o.visible = false; this.hidden.push(o); } return; }
       this.swapped.push([o, o.material]);
-      o.material = this._normalMaterial(this.sensitivity(o));
+      o.material = o.userData.outlineMaterial || this._normalMaterial(this.sensitivity(o));
     });
   }
-  _restoreMaterials() { for (const [o, m] of this.swapped) o.material = m; this.swapped.length = 0; }
+  _restoreMaterials() {
+    for (const [o, m] of this.swapped) o.material = m; this.swapped.length = 0;
+    for (const o of this.hidden) o.visible = true; this.hidden.length = 0;
+  }
   render(renderer, writeBuffer, readBuffer) {
     const prevBg = this.scene.background;
     this.scene.background = null;   // el fondo debe quedar a profundidad 1 para que la silueta marque borde

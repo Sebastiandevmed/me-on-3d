@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-17 (sesión 11, rama `calidad-avatar`: las "grietas negras" de la cara eran rendijas de 3-10 mm de la malla de Meshy que `close_gaps.py` no alcanza; ahora las tapa una CÁSCARA INTERIOR remallada bajo la piel (`add_gap_shell.py`) y el contorno ignora escalones de profundidad < 8 mm (`depthMin`); además el atlas da 2× de área a las islas de la cabeza (`HEAD_SCALE` en `repack_uvs.py`). GLB re-exportado (4.04 MB, 56 500 tris). Ver "Sesión 11". OJO: `dist/` NO se regeneró (hay cambios sin commitear de velo/cámara de la sesión anterior en `export/`). Antes — sesión 10: landing híbrida terminada; sesión 9: contorno con sensibilidad por objeto. Pendiente del usuario: capturas de PipeBot, links de contacto, dominio)
+**Última actualización:** 2026-09-27 (sesión 13, rama `calidad-avatar`: el grafiti pasó a ser una pieza 3:2 de 2.4 m que cubre la pared lateral de punta a punta y tiene RELIEVE real (capas apiladas de 6 cm + sombra de contacto + contorno cel recortado por la silueta, ver "Sesión 13"); el pre-pase del contorno acepta ahora `userData.outlineMaterial` / `userData.outline === false` por malla; encuadre vertical del hero rehecho para la pieza ancha. Antes — sesión 12: grafiti cuadrado + neones; sesión 11: cáscara interior contra las grietas. Pendiente del usuario: capturas de PipeBot, links de contacto, dominio)
 
 ## Cómo retomar
 
@@ -776,7 +776,8 @@ Cero cambios en Blender ni en el GLB. Todo vive en el visor:
 - **El `<h1>` "Sebastián Escobar" sigue en el hero**, así que el nombre sale dos veces (pared y
   texto). El pedido original era "en vez de plano"; decidir si el h1 se reduce a un subtítulo,
   se vuelve `sr-only` (accesibilidad/SEO) o se queda.
-- **Encuadre vertical del hero (hecho, segundo pedido de la sesión):** de frente el grafiti no
+- **Encuadre vertical del hero (hecho, segundo pedido de la sesión; REHECHO en la sesión 13
+  para la pieza ancha):** de frente el grafiti no
   entraba en cuadro (a 375 px el fov horizontal es de ~28°). Ahora `hero.movil` pone la cámara
   en la esquina delantera izquierda mirando en diagonal hacia +X: `pos (-1.75, 1.25, -2.95)`,
   `target (1.0, 0.30, 0.2)`, fov 58. Grafiti entero a la izquierda, personaje de perfil a la
@@ -792,3 +793,76 @@ Cero cambios en Blender ni en el GLB. Todo vive en el visor:
   (de cuando se probó Pages desde esa rama). Se añadió `main` con
   `gh api -X POST repos/Sebastiandevmed/me-on-3d/environments/github-pages/deployment-branch-policies -f name=main -f type=branch`
   y se relanzó el run. Sitio vivo: https://sebastiandevmed.github.io/me-on-3d/
+
+## Sesión 13 (2026-09-27) — el grafiti cubre todo el muro y tiene relieve
+
+Pedido del usuario (con captura del sitio vivo): "¿puedes estirar el graffiti hasta el final del
+muro? También me gustaría que se viera más 3D, menos plano".
+
+### Imagen ancha (Higgsfield, 5.5 créditos, saldo antes 989)
+
+- `gpt_image_2_5` high 2k **3:2**, con `cand2b_sin_comuna13.png` como referencia y el truco de la
+  sesión 12 (enumerar TODO lo que se conserva y al final lo que cambia: "las dos líneas se
+  ESTIRAN hasta los bordes, más paneles cian repartidos"). Dos variantes: `generated/graffiti/
+  wide_a.png` (**elegida**: letras de borde a borde, 5 paneles) y `wide_b.png` (6 paneles, más
+  margen). 2048×1360 cada una. La cuadrada anterior quedó en `generated/graffiti/
+  graffiti_cuadrado_v1.webp` por si hay que volver.
+- Textura web: `export/img/graffiti.webp` ahora 2048×1360 q80, 533 KB (antes 1536² 455 KB).
+
+### Colocación: de punta a punta de la pared lateral
+
+`WALLS.side` en `graffiti.js`: `size` ahora es la ALTURA (1.6 m) y el ancho sale del aspecto de
+la imagen (3:2 → 2.4 m). Centro `(2.045, 1.18, 0.12)` → la pieza va de z = -1.08 a 1.32. La
+pared +X va de z = -4 (detrás de la cámara) a 1.445 (esquina con la ventana); desde la cámara del
+hero de escritorio (fov horizontal ≈ 62°) el borde izquierdo del cuadro corta la pared en
+z ≈ -1.1, así que la pieza arranca justo donde termina lo visible y muere a 12 cm de la esquina.
+Los tubos cian van en los extremos (`gap` 0.08 → z = -1.28 y 1.40; el de la esquina cabe por
+2 cm) y el panel magenta mide el 80 % del ancho, con tres soportes.
+
+### Relieve: "sprite stacking" + sombra + contorno cel recortado
+
+- **Pila de 15 planos** (`graffiti_layer_0..13` + `graffiti_decal`) con la misma silueta, de la
+  pared (6 mm) hacia el cuarto hasta **6 cm** (`?gdepth=`, 0 = calcomanía plana de antes). Las
+  capas de abajo llevan la imagen con tinte oscuro (`0x2a2530`) y `alphaTest 0.5` (recorte sin
+  mezcla → se ordenan solas por profundidad); la de arriba es la de siempre (mapa + emisivo +
+  alpha difuminado, `alphaTest 0.1`). En escorzo asoman los lados oscuros y las letras se leen
+  como bloques que salen del muro. 14 capas y no 8 porque con menos el colibrí y los paneles
+  mostraban "escalera" en primer plano (`generated/renders/graffiti_relieve_escorzo.png`).
+- **Sombra de contacto** (`graffiti_shadow`): silueta desenfocada (1.4 % del lado) y corrida
+  2 % hacia abajo, negra al 75 %, pegada al muro (3 mm) bajo la pila.
+- **Contorno cel:** primero salió dibujado el RECTÁNGULO del plano. Causa: el pre-pase de
+  `OutlinePass` (postfx.js) cambia TODOS los materiales por un `MeshNormalMaterial` sin máscara,
+  así que el plano entero escribía profundidad a 6 cm (> `depthMin` 8 mm). Arreglo en dos
+  partes: `_swapMaterials` respeta ahora `mesh.userData.outlineMaterial` (material propio para el
+  pre-pase) y `mesh.userData.outline === false` (la malla se esconde en el pre-pase; lo usa la
+  sombra); y `graffiti.js` da a la pila un `ShaderMaterial` equivalente al de normales pero
+  recortado por la misma máscara (`normalCutout`; `MeshNormalMaterial` no admite `alphaMap`,
+  avisó con un warning). Resultado: la tinta sigue el borde de las letras en relieve
+  (`?gink=`, 0.6 por omisión).
+- Suelo de ruido en la máscara alpha (`smooth(0.15, 0.40, m)`): el grano claro del muro pintado
+  daba alphas de 0.1-0.3 que antes se mezclaban invisibles y ahora escribirían profundidad.
+
+### Encuadre vertical rehecho
+
+Con 2.4 m de pieza el `hero.movil` de la sesión 12 mostraba media pieza cortada. Nuevo:
+`pos (-1.90, 1.25, -3.80)`, `target (0.67, 0.12, -0.74)`, fov 60 (cámara al fondo del cuarto, en
+la esquina delantera izquierda, mirando 40° hacia +X). Grafiti entero arriba a la izquierda
+(solo la punta de la flecha de la S sale del cuadro), personaje de perfil a la derecha, el h1
+apenas roza las gotas de abajo. Elegido entre 4 variantes con `tools/hero_shot.mjs` (nuevo:
+hero escritorio + vertical + dos primeros planos del grafiti en ~40 s, a `generated/renders/
+sweep/hero_*.png`).
+
+### Verificación
+
+`node tools/landing_probe.mjs` → `LANDING OK` (60 fps, 5 secciones, sin desborde, plan B ok);
+`node tools/preview_probe.mjs` → `PROBE OK errors []`; `node tools/make_poster.mjs` → poster y og
+regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de aprobación:
+`generated/renders/landing_hibrido_hero.png`, `landing_hibrido_movil_hero.png`,
+`graffiti_relieve_close.png`, `graffiti_relieve_escorzo.png`.
+
+### Pendiente / abierto
+
+- El h1 "Sebastián Escobar" sigue duplicando el nombre de la pared (abierto desde la sesión 12).
+- En primer plano extremo (a < 1 m) la pila deja ver escalones en los bordes de los paneles
+  cian y el colibrí; desde cualquier cámara de la landing no se nota. Si molesta: más capas
+  (`LAYERS`) o menos profundidad (`?gdepth=0.04`).
