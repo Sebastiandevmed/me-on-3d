@@ -775,7 +775,7 @@ Cero cambios en Blender ni en el GLB. Todo vive en el visor:
 
 - **El `<h1>` "Sebastián Escobar" sigue en el hero**, así que el nombre sale dos veces (pared y
   texto). El pedido original era "en vez de plano"; decidir si el h1 se reduce a un subtítulo,
-  se vuelve `sr-only` (accesibilidad/SEO) o se queda.
+  se vuelve `sr-only` (accesibilidad/SEO) o se queda. → Resuelto en la sesión 13: sr-only.
 - **Encuadre vertical del hero (hecho, segundo pedido de la sesión; REHECHO en la sesión 13
   para la pieza ancha):** de frente el grafiti no
   entraba en cuadro (a 375 px el fov horizontal es de ~28°). Ahora `hero.movil` pone la cámara
@@ -862,7 +862,12 @@ regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de a
 
 ### Pendiente / abierto
 
-- El h1 "Sebastián Escobar" sigue duplicando el nombre de la pared (abierto desde la sesión 12).
+- **h1 del hero (resuelto, tercer pedido de la sesión):** el usuario pidió quitar el "Sebastián
+  Escobar" en texto plano blanco. El `<h1>` se queda en el HTML pero visualmente oculto (clip
+  de 1 px, el patrón sr-only) para no perder el encabezado de la página en lectores de pantalla y
+  buscadores; el nombre lo pone solo el grafiti. En el plan B sin WebGL el póster ya trae la
+  pared con el nombre. Capturas: `generated/renders/sweep/hero_desk_sinh1.png` y
+  `hero_movil_sinh1.png`.
 - En primer plano extremo (a < 1 m) la pila deja ver escalones en los bordes de los paneles
   cian y el colibrí; desde cualquier cámara de la landing no se nota. Si molesta: más capas
   (`LAYERS`) o menos profundidad (`?gdepth=0.04`).
