@@ -15,8 +15,14 @@ export const CAMERA_STATES = {
   // Rama ajuste-velo-camara: posiciones ~0.45 m mas cerca y fov +3 grados para que el personaje
   // ocupe mas cuadro sin invadir la columna de texto (la derecha); stack NO se toca porque su
   // angulo es el unico desde el que se leen los monitores encendidos.
+  // Vertical (sesion 12): la camara se va a la esquina delantera izquierda del cuarto y mira
+  // en diagonal hacia +X, para que el grafiti del nombre (pared +X, lib/graffiti.js) entre
+  // ENTERO a la izquierda y el personaje quede de perfil a la derecha, todo en el 40 % de
+  // arriba, que es lo que deja libre la columna de texto. De frente (encuadre anterior) el
+  // grafiti no entraba en cuadro: con 375 px de ancho el fov horizontal es de ~28 grados.
+  // Elegido con capturas (scratchpad movil_hero.mjs, variantes A-I y H2/H3).
   hero:      { pos: [-1.35, 1.90, -3.25], target: [0.00, 1.00, -0.60], fov: 41,
-               movil: { pos: [-0.90, 1.75, -2.65], target: [0.05, 0.55, -0.55], fov: 52 } },
+               movil: { pos: [-1.75, 1.25, -2.95], target: [1.00, 0.30, 0.20], fov: 58 } },
   // Retrato 3/4: el personaje se va al tercio izquierdo y deja sitio a la columna de texto.
   sobreMi:   { pos: [-0.95, 1.62, -2.15], target: [-0.10, 1.30, -0.35], fov: 34,
                movil: { pos: [-0.80, 1.66, -2.10], target: [-0.05, 0.95, -0.35], fov: 48 } },
