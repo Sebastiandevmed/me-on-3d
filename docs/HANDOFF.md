@@ -786,3 +786,9 @@ Cero cambios en Blender ni en el GLB. Todo vive en el visor:
 - Publicado: commits de la sesión en `calidad-avatar` (incluidos los cambios de velo/cámara y el
   cuestionario de cliente que venían sin commitear), `main` avanzada por fast-forward y
   `dist/` regenerado con `tools/build_site.sh`; el push a `main` dispara el workflow de Pages.
+- **Trampa de GitHub Pages (arreglada):** el primer push a `main` falló con "Branch main is not
+  allowed to deploy to github-pages due to environment protection rules": el entorno
+  `github-pages` tenía una política de ramas personalizada que solo permitía `landing-hibrido`
+  (de cuando se probó Pages desde esa rama). Se añadió `main` con
+  `gh api -X POST repos/Sebastiandevmed/me-on-3d/environments/github-pages/deployment-branch-policies -f name=main -f type=branch`
+  y se relanzó el run. Sitio vivo: https://sebastiandevmed.github.io/me-on-3d/
