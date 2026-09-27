@@ -714,3 +714,75 @@ Copia de seguridad de los .blend y GLB anteriores: solo en el scratchpad de la s
   con esa rama; luego `tools/build_site.sh` + commit de `dist/` en `main` (GitHub Pages).
 - Quedan motas horneadas en sien y mentón (sesión 9) y una raya gris tenue junto a la nariz;
   ninguna es negra ya.
+
+## Sesión 12 (2026-09-27) — el nombre grafiteado en la pared, con paneles de neón
+
+Pedido del usuario: que su nombre no se vea "plano" sino grafiteado, wildstyle a full, con
+paneles de neón, "muy urbano y característico de Medellín", pintado en el espacio libre de la
+pared junto a la ventana. Flujo acordado: 3 candidatos en Higgsfield → él escoge → se lleva a
+la web como código.
+
+### Imagen (Higgsfield, `generated/graffiti/`)
+
+- Saldo real al empezar: **1000 créditos, plan Plus** (la memoria decía 24-54; ya no aplica el
+  "no gastar sin preguntar" por saldo, pero sigue siendo cortesía avisar). Gasto de la sesión:
+  **11 créditos** (3 candidatos + 1 edición, `gpt_image_2_5` calidad high 2k 1:1 = 2.75 c/u).
+  Anotado en `generated/credits.log`.
+- Candidatos: `cand1_wildstyle_gradiente` (magenta→naranja→cian, flores de silletero),
+  `cand2_neon_tubos` (cromo/violeta, contorno de neón rosa, paneles cian, Metrocable, colibrí),
+  `cand3_cromo_skyline` (cromo, filos tricolor, skyline). **Elegido: 2**, editado con la misma
+  imagen como referencia para quitar los textos "COMUNA 13" (el colibrí y la corona se quedan):
+  `cand2b_sin_comuna13.png` (2048², insumo irremplazable, fuera de git como el resto de
+  `generated/`). Truco que funcionó a la primera: pedir la edición enumerando TODO lo que debe
+  quedar igual y solo después lo que se quita.
+- Textura web: `export/img/graffiti.webp` (1536², q86, 455 KB). Sí va en git y `build_site.sh`
+  ya la copia (`img/*.webp`).
+
+### Integración: `export/lib/graffiti.js` (nuevo), enganchado en `scene.js`
+
+Cero cambios en Blender ni en el GLB. Todo vive en el visor:
+
+- **Pared:** la lateral +X (glTF), la que queda a la IZQUIERDA de la cámara del hero: es el muro
+  vacío grande junto a la ventana. Se probó también la franja de la pared trasera bajo la
+  repisa (`?gwall=back`): sale diminuta y tapada por el personaje y la barra RGB
+  (`generated/renders/sweep/g_back.png` contra `g_side2.png`). Pieza de 1.6 m centrada en
+  (2.045, 1.18, 0.42); a 1.9 m y más alta se salía del encuadre por arriba (`g_side.png`).
+- **Calcomanía:** plano `MeshStandardMaterial` (NO toon, a propósito: necesita emisivo propio
+  > 2.5 lineal para el bloom) con tres texturas calculadas en canvas al cargar la imagen:
+  `map` = la imagen; `emissiveMap` = solo píxeles saturados Y claros (los tubos rosa del
+  contorno y los paneles cian pintados; el cromo y el muro salen negros) a intensidad 3.0;
+  `alphaMap` = pintura opaca / muro de la imagen transparente. **Por qué el alpha:** en la
+  primera captura la pieza se leía como un póster (rectángulo más oscuro que la pared, porque el
+  toon de la pared nunca baja del 35 % y un Standard sí). Con el fondo transparente las letras
+  quedan sobre la pared REAL con su luz. La máscara va en dos pasos porque los contornos negros
+  son tan oscuros como el muro y con un umbral a secas se hacían agujeros: máscara desenfocada
+  (radio 1.2 % del lado) que tapa lo que está pegado a pintura clara, más borde difuminado.
+- **Neón físico:** dos tubos cian verticales flanqueando la pieza y un panel magenta encima,
+  con soportes, emisivos a ~3.7-4 (respiran / parpadean levemente en `update`) y una
+  `PointLight` cada uno (cian 0.6, magenta 0.8). A 1.4 el cian lavaba las letras a lila.
+- Interruptores: `?graffiti=0`, `?gwall=side|back`, `?gsize= ?gglow= ?glit=`. `status.graffiti`
+  dice la pared; `status.lights` suma las 3 puntuales (la sonda exige ≥ 9, sigue OK).
+
+### Verificación
+
+`node tools/look_sweep.mjs` (capturas `sweep/g_*.png`), `node tools/landing_probe.mjs` →
+`LANDING OK` 60 fps, 5 secciones escritorio + vertical, plan B, sin errores;
+`node tools/preview_probe.mjs` → `PROBE OK errors []`. `node tools/make_poster.mjs` regenerado:
+`poster.jpg` y `og.jpg` ya traen el grafiti. Capturas de aprobación:
+`generated/renders/landing_hibrido_hero.png` y `landing_hibrido_sobreMi.png`.
+
+### Pendiente / decisiones abiertas
+
+- **El `<h1>` "Sebastián Escobar" sigue en el hero**, así que el nombre sale dos veces (pared y
+  texto). El pedido original era "en vez de plano"; decidir si el h1 se reduce a un subtítulo,
+  se vuelve `sr-only` (accesibilidad/SEO) o se queda.
+- **Encuadre vertical del hero (hecho, segundo pedido de la sesión):** de frente el grafiti no
+  entraba en cuadro (a 375 px el fov horizontal es de ~28°). Ahora `hero.movil` pone la cámara
+  en la esquina delantera izquierda mirando en diagonal hacia +X: `pos (-1.75, 1.25, -2.95)`,
+  `target (1.0, 0.30, 0.2)`, fov 58. Grafiti entero a la izquierda, personaje de perfil a la
+  derecha, todo en el 40 % superior que deja libre la columna de texto. Se eligió entre 12
+  variantes capturadas con un script de scratchpad (copias en `generated/renders/sweep/movil_*.png`;
+  H3 es la elegida). Un intento de frente con más fov (A-F) metía medio techo y cortaba ambos.
+- Publicado: commits de la sesión en `calidad-avatar` (incluidos los cambios de velo/cámara y el
+  cuestionario de cliente que venían sin commitear), `main` avanzada por fast-forward y
+  `dist/` regenerado con `tools/build_site.sh`; el push a `main` dispara el workflow de Pages.
