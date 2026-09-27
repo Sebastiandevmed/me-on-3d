@@ -12,11 +12,14 @@
 
 export const CAMERA_STATES = {
   // Encuadre de aprobacion de la sesion 2 (equivale a la camara de Blender -1.3, 3.7, 1.95).
-  hero:      { pos: [-1.30, 1.95, -3.70], target: [0.00, 1.00, -0.60], fov: 38,
-               movil: { pos: [-0.95, 1.80, -3.05], target: [0.05, 0.55, -0.55], fov: 50 } },
+  // Rama ajuste-velo-camara: posiciones ~0.45 m mas cerca y fov +3 grados para que el personaje
+  // ocupe mas cuadro sin invadir la columna de texto (la derecha); stack NO se toca porque su
+  // angulo es el unico desde el que se leen los monitores encendidos.
+  hero:      { pos: [-1.35, 1.90, -3.25], target: [0.00, 1.00, -0.60], fov: 41,
+               movil: { pos: [-0.90, 1.75, -2.65], target: [0.05, 0.55, -0.55], fov: 52 } },
   // Retrato 3/4: el personaje se va al tercio izquierdo y deja sitio a la columna de texto.
-  sobreMi:   { pos: [-0.95, 1.62, -2.35], target: [-0.10, 1.30, -0.35], fov: 31,
-               movil: { pos: [-0.80, 1.66, -2.30], target: [-0.05, 0.95, -0.35], fov: 44 } },
+  sobreMi:   { pos: [-0.95, 1.62, -2.15], target: [-0.10, 1.30, -0.35], fov: 34,
+               movil: { pos: [-0.80, 1.66, -2.10], target: [-0.05, 0.95, -0.35], fov: 48 } },
   // Sobre el hombro: unica posicion desde la que se leen los monitores encendidos.
   stack:     { pos: [ 0.62, 1.80,  0.85], target: [0.00, 1.12, -1.30], fov: 42,
                movil: { pos: [ 0.12, 2.15,  1.15], target: [0.00, 0.35, -1.40], fov: 46 } },
@@ -27,8 +30,8 @@ export const CAMERA_STATES = {
   proyectos: { pos: [ 1.45, 1.85, -3.10], target: [0.20, 1.10, -0.60], fov: 40,
                movil: { pos: [ 1.15, 1.80, -2.95], target: [0.15, 0.70, -0.60], fov: 52 } },
   // Primer plano frontal para cerrar.
-  contacto:  { pos: [-0.30, 1.58, -1.85], target: [0.00, 1.32, -0.30], fov: 28,
-               movil: { pos: [-0.25, 1.60, -1.95], target: [0.00, 1.05, -0.30], fov: 40 } },
+  contacto:  { pos: [-0.30, 1.58, -1.70], target: [0.00, 1.32, -0.30], fov: 31,
+               movil: { pos: [-0.25, 1.60, -1.80], target: [0.00, 1.05, -0.30], fov: 43 } },
 };
 
 // En vertical (375 x 812 = aspecto 0.46 contra el 1.6 del escritorio) el fov es VERTICAL, asi que
