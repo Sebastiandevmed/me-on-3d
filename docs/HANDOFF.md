@@ -898,5 +898,6 @@ regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de a
   con las barras de Safari, quedaban pegados al texto) y `#hero{padding-bottom:6svh}` en móvil.
 - Pages: `deploy-pages@v4` dejó de encontrar el artefacto de `upload-pages-artifact@v3` ("No artifacts named
   github-pages"); el workflow pasó a configure-pages@v6 / upload-pages-artifact@v5 / deploy-pages@v5.
+- **WhatsApp** (+57 320 664 8234): botón flotante `#wa` (aparece tras media pantalla, se oculta con contacto a la vista; en móvil solo el ícono), enlace en contacto y `telephone` en el JSON-LD. Mensaje prellenado.
 - Siguiente paso hablado: pauta en Instagram con la cuenta en 0 seguidores. Pendientes para eso: analítica
   (no hay ninguna), CTA directo a WhatsApp de trabajo, dominio propio, contenido mínimo en el perfil.
