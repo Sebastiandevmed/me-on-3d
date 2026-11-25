@@ -43,7 +43,7 @@ const OUTLINE_FRAG = /* glsl */`
 uniform sampler2D tDiffuse, tNormal, tDepth;
 uniform vec2 texel;
 uniform float cameraNear, cameraFar;
-uniform float thickness, depthBias, normalBias, strength, ramp;
+uniform float thickness, depthBias, normalBias, strength, ramp, depthMin;
 uniform vec3 outlineColor;
 varying vec2 vUv;
 
@@ -57,11 +57,18 @@ void main() {
   vec4 base = texture2D(tDiffuse, vUv);
   vec2 o = texel * thickness;
   float dc = linearDepth(vUv);
-  float de = abs(linearDepth(vUv + vec2(o.x, 0.0)) - dc) + abs(linearDepth(vUv - vec2(o.x, 0.0)) - dc)
-           + abs(linearDepth(vUv + vec2(0.0, o.y)) - dc) + abs(linearDepth(vUv - vec2(0.0, o.y)) - dc);
+  float dR = abs(linearDepth(vUv + vec2(o.x, 0.0)) - dc), dL = abs(linearDepth(vUv - vec2(o.x, 0.0)) - dc);
+  float dU = abs(linearDepth(vUv + vec2(0.0, o.y)) - dc), dD = abs(linearDepth(vUv - vec2(0.0, o.y)) - dc);
+  float de = dR + dL + dU + dD;
   // Relativo a la profundidad: sin esto los objetos del fondo salen con un contorno mucho
   // mas grueso que los de delante, porque el mismo salto en metros pesa menos de cerca.
   de /= max(dc, 1e-4);
+  // Suelo ABSOLUTO en metros: un salto menor que depthMin no es un borde. Existe por la cascara
+  // interior de la cabeza (blender/scripts/add_gap_shell.py): las rendijas de la malla de Meshy
+  // ya no muestran negro sino piel 2.5-6 mm mas honda, y ese escalon, relativo a la
+  // profundidad, entintaba igual en primer plano. Un pliegue real (nariz, capucha, visera)
+  // salta 1 cm o mas.
+  if (max(max(dR, dL), max(dU, dD)) * (cameraFar - cameraNear) < depthMin) de = 0.0;
 
   vec4 ncs = nrm(vUv);
   vec3 nc = ncs.xyz;
@@ -86,6 +93,7 @@ class OutlinePass extends Pass {
     // `sensitivity(mesh)` la decide; el visor la usa para bajarsela a las mallas de Meshy.
     this.sensitivity = opts.sensitivity ?? (() => 1);
     this.normalMaterials = new Map();   // sens redondeada -> MeshNormalMaterial con esa opacity
+    this.hidden = [];                   // mallas escondidas durante el pre-pase (userData.outline === false)
     this.swapped = [];
     // LinearFilter en el buffer de normales: cada muestra promedia sus cuatro texeles, lo que
     // atenua el ruido de un pixel de ancho sin tocar los pliegues, que ocupan varios. La
@@ -99,6 +107,7 @@ class OutlinePass extends Pass {
         cameraNear: { value: camera.near }, cameraFar: { value: camera.far },
         thickness: { value: opts.thickness ?? 1.4 },
         depthBias: { value: opts.depthBias ?? 0.003 },
+        depthMin: { value: opts.depthMin ?? 0.008 },      // m: ver el shader; ?dmin= en el visor
         // Umbral BASE, el del cuarto (sens 1, de frente). El personaje lo recibe multiplicado
         // por 1/sens, asi que ya no hay que subirlo aqui para librarse de sus rayones.
         normalBias: { value: opts.normalBias ?? 0.8 },
@@ -128,15 +137,23 @@ class OutlinePass extends Pass {
   }
   // scene.overrideMaterial no sirve aqui: es UN material para toda la escena y necesitamos una
   // alfa distinta por malla. Se intercambian y se restauran alrededor del pre-pase.
+  // Dos excepciones por malla via userData: `outlineMaterial` es un material propio para el
+  // pre-pase (el grafiti lo usa para recortar sus planos con la mascara alpha: sin esto el
+  // plano entero escribia profundidad y salia dibujado el RECTANGULO) y `outline: false` la
+  // esconde del pre-pase (calcomanias que no deben marcar borde ni normal).
   _swapMaterials() {
-    this.swapped.length = 0;
+    this.swapped.length = 0; this.hidden.length = 0;
     this.scene.traverse((o) => {
       if (!o.isMesh || !o.material) return;
+      if (o.userData.outline === false) { if (o.visible) { o.visible = false; this.hidden.push(o); } return; }
       this.swapped.push([o, o.material]);
-      o.material = this._normalMaterial(this.sensitivity(o));
+      o.material = o.userData.outlineMaterial || this._normalMaterial(this.sensitivity(o));
     });
   }
-  _restoreMaterials() { for (const [o, m] of this.swapped) o.material = m; this.swapped.length = 0; }
+  _restoreMaterials() {
+    for (const [o, m] of this.swapped) o.material = m; this.swapped.length = 0;
+    for (const o of this.hidden) o.visible = true; this.hidden.length = 0;
+  }
   render(renderer, writeBuffer, readBuffer) {
     const prevBg = this.scene.background;
     this.scene.background = null;   // el fondo debe quedar a profundidad 1 para que la silueta marque borde

@@ -47,11 +47,12 @@ meshes = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith(
 if not meshes: common.fail('no hay malla Body')
 # presupuesto de triangulos: TODAS las mallas del .blend son el personaje (cuerpo +
 # parpados + cejas + candongas + audifonos), asi que se suman todas, no solo Body*.
-# El tope subio de 40000 a 42000 en Task 4 para dar sitio a la pieza de audifonos (~860 tris).
+# El tope subio de 40000 a 42000 en Task 4 para dar sitio a la pieza de audifonos (~860 tris), y a
+# 48000 con la cascara interior de la cabeza de add_gap_shell.py (~7000 tris que tapan las rendijas).
 all_meshes = [o for o in bpy.data.objects if o.type == 'MESH']
 tris = sum(common.tri_count(m) for m in all_meshes)
 body_tris = sum(common.tri_count(m) for m in meshes)
-if tris > 42000: common.fail(f'personaje demasiado pesado: {tris}')
+if tris > 48000: common.fail(f'personaje demasiado pesado: {tris}')
 zs = [(m.matrix_world @ Vector(v.co)).z for m in meshes for v in m.data.vertices]
 h = max(zs) - min(zs)
 if not (1.6 < h < 1.9): common.fail(f'altura fuera de rango: {h}')

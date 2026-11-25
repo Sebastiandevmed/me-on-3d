@@ -37,6 +37,10 @@ ANGLE = 66.0            # grados: limite de Smart UV Project. A 89 las dos caras
                         # (10 % de los texeles de las manos solapados -> dedos negros); a 66 hay mas islas pero sin solape
 OLD_ATTR = 'uv_meshy'   # el UV original de Meshy se guarda como atributo de esquina (no se exporta) para poder repetir el paso
 NEW_UV = 'UVRepack'
+HEAD_SCALE = 2.0        # las islas de la cabeza se escalan x2 (x4 en area) antes de empaquetar: en el visor la cabeza
+                        # se ve 3-8x mas grande que el resto (primeros planos y seguimiento de cursor) y con densidad
+                        # uniforme sus bordes piel/gorra/barba se leen dentados. Ver "escala lineal" en el log: se
+                        # mide aparte para cabeza y cuerpo, y solo el cuerpo tiene tope minimo.
 
 args = common.args()
 PROBE, DRY, FORCE = '--probe' in args, '--dry-run' in args, '--force' in args   # --force: repetir aunque ya este aplicado (p. ej. tras close_gaps.py)
@@ -136,6 +140,50 @@ bpy.ops.mesh.select_all(action='SELECT')
 import math
 bpy.ops.uv.smart_project(angle_limit=math.radians(ANGLE), island_margin=MARGIN_PX / SIZE, area_weight=0.0, correct_aspect=True, scale_to_bounds=False)
 bpy.ops.object.mode_set(mode='OBJECT')
+
+# --- 2b. mas densidad para la cabeza: se escalan x HEAD_SCALE las islas UV cuya mayoria de area
+# 3D queda por encima de la base del cuello (islas ENTERAS: escalar caras sueltas rasgaria la
+# isla y dejaria costuras) y se vuelve a empaquetar todo con el mismo margen.
+arm = bpy.data.objects.get('Armature')
+neck_z = (arm.matrix_world @ arm.pose.bones['spine005'].head).z if arm else None
+if HEAD_SCALE != 1.0 and neck_z is not None:
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+    uvl = bm.loops.layers.uv[NEW_UV]
+    parent = list(range(len(bm.faces)))
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]; i = parent[i]
+        return i
+    for e in bm.edges:
+        fs = e.link_faces
+        if len(fs) != 2: continue
+        a, b = fs
+        # misma isla si los dos loops de cada vertice de la arista tienen la misma UV en ambas caras
+        same = True
+        for v in e.verts:
+            la = next(l for l in a.loops if l.vert == v); lb = next(l for l in b.loops if l.vert == v)
+            if (la[uvl].uv - lb[uvl].uv).length > 1e-6: same = False; break
+        if same: parent[find(a.index)] = find(b.index)
+    M = body.matrix_world
+    area_head = {}; area_all = {}
+    for f in bm.faces:
+        r = find(f.index); ar = f.calc_area()
+        area_all[r] = area_all.get(r, 0.0) + ar
+        if (M @ f.calc_center_median()).z > neck_z: area_head[r] = area_head.get(r, 0.0) + ar
+    head_roots = {r for r, ar in area_all.items() if area_head.get(r, 0.0) > 0.5 * ar}
+    n_head = 0
+    for f in bm.faces:
+        if find(f.index) in head_roots:
+            n_head += 1
+            for l in f.loops: l[uvl].uv = l[uvl].uv * HEAD_SCALE
+    bm.to_mesh(me); bm.free(); me.update()
+    print('REPACK cabeza: %d islas (%d caras) escaladas x%.1f; reempaquetando' % (len(head_roots), n_head, HEAD_SCALE))
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(rotate=True, scale=True, margin_method='FRACTION', margin=MARGIN_PX / SIZE, shape_method='CONCAVE')
+    bpy.ops.object.mode_set(mode='OBJECT')
 body.select_set(False)
 tris2, uv_new = tri_list(me.uv_layers[NEW_UV])
 assert (tris2 == tris).all()
@@ -147,9 +195,17 @@ def area(uv):
     a = uv[:, 1] - uv[:, 0]; b = uv[:, 2] - uv[:, 0]
     return float(np.abs(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]).sum() / 2)
 scale = (area(uv_new) / area(uv_old)) ** 0.5
-print('REPACK escala lineal de texeles nueva/vieja = %.3f' % scale)
+print('REPACK escala lineal de texeles nueva/vieja = %.3f (global)' % scale)
+if neck_z is not None:
+    # por separado: la cabeza gana densidad a proposito; el cuerpo es el que no debe perderla
+    zc = np.array([(body.matrix_world @ p.center).z for p in me.polygons])
+    tri_head = np.repeat(zc > neck_z, [max(len(p.vertices) - 2, 0) for p in me.polygons])
+    for name, m in (('cabeza', tri_head), ('cuerpo', ~tri_head)):
+        sc = (area(uv_new[m]) / area(uv_old[m])) ** 0.5
+        print('REPACK escala lineal %s = %.3f' % (name, sc))
+        if name == 'cuerpo': scale = sc
 if scale < 0.6:
-    common.fail('el reempaquetado pierde demasiada resolucion (escala %.2f): bajar MARGIN_PX' % scale)
+    common.fail('el reempaquetado pierde demasiada resolucion (escala %.2f): bajar MARGIN_PX o HEAD_SCALE' % scale)
 if PROBE:
     print('REPACK probe; no se hornea ni se guarda')
     sys.exit(0)
