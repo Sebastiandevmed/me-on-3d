@@ -20,11 +20,11 @@ export const CAMERA_STATES = {
   // ENTERO a la izquierda y el personaje quede de perfil a la derecha, todo en el 40 % de
   // arriba, que es lo que deja libre la columna de texto. De frente (encuadre anterior) el
   // grafiti no entraba en cuadro: con 375 px de ancho el fov horizontal es de ~28 grados.
-  // Elegido con capturas (scratchpad movil_hero.mjs, variantes A-I y H2/H3). Sesion 14: target.y
-  // 0.12 -> -0.15 para subir y agrandar el grafiti y la barra LED (a 390x664, con las barras de
-  // Safari, quedaban bajos y casi pegados al texto).
+  // Elegido con capturas (scratchpad movil_hero.mjs, variantes A-I y H2/H3). Sesion 14: camara mas
+  // alta (y 1.25 -> 2.05) mirando hacia abajo: el escritorio baja en cuadro y el grafiti + barra LED
+  // quedan enteros POR ENCIMA de los monitores (antes los PC le tapaban la mitad de abajo).
   hero:      { pos: [-1.35, 1.90, -3.25], target: [0.00, 1.00, -0.60], fov: 41,
-               movil: { pos: [-1.90, 1.25, -3.80], target: [0.67, -0.15, -0.74], fov: 60 } },
+               movil: { pos: [-1.90, 2.05, -3.80], target: [0.67, 0.20, -0.74], fov: 60 } },
   // Retrato 3/4: el personaje se va al tercio izquierdo y deja sitio a la columna de texto.
   sobreMi:   { pos: [-0.95, 1.62, -2.15], target: [-0.10, 1.30, -0.35], fov: 34,
                movil: { pos: [-0.80, 1.66, -2.10], target: [-0.05, 0.95, -0.35], fov: 48 } },
