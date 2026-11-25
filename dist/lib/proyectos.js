@@ -16,11 +16,12 @@ export function animaProyectos() {
   window.__muroST = muros.length;
 
   const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // En movil la galeria no tiene margen y el tilt de una pieza de 2000 px desborda:
-  // viajes mas cortos y un penduleo sutil. Escritorio conserva el viaje completo.
+  // En movil la galeria no tiene margen: los viajes laterales cortaban los titulos contra el
+  // borde, asi que alli casi no hay viaje en X y el giro es solo un cabeceo suave en X.
   const angosto = matchMedia('(max-width:820px)').matches;
-  const ESC = angosto ? 0.55 : 1;   // factor de viajes (entrada + parallax) en movil
-  const AMP = angosto ? 4 : 10;     // grados del penduleo en movil / escritorio
+  const ESC = angosto ? 0.55 : 1;   // factor de viajes en Y (entrada + parallax)
+  const ESCX = angosto ? 0.15 : 1;  // factor de viajes en X
+  const AMP = angosto ? 5 : 7;      // grados maximos de inclinacion al entrar/salir
 
   // El fondo de proyectos no pinta negro: el tinte de color se ve detras.
   const centro = () => innerHeight / 2;
@@ -54,6 +55,28 @@ export function animaProyectos() {
     },
   });
 
+  // ---- Neblina de la union: sube mientras #proyectos asoma (el 3D se desenfoca y se calienta),
+  // toca techo mas o menos donde el observador de index.html apaga el canvas, y baja cuando la
+  // seccion ya llena la pantalla. Asi el apagado ocurre DENTRO de la neblina y no se ve el corte.
+  // Es opacidad/desenfoque ligado al scroll, no movimiento: corre tambien en modo reducido.
+  if (document.getElementById('neblina')) {
+    const b = document.body;
+    const pon = (v) => { b.style.setProperty('--nb', v.toFixed(3)); b.classList.toggle('neblina', v > 0.005); };
+    ScrollTrigger.create({
+      trigger: sec,
+      start: 'top bottom',
+      end: 'top top',
+      onUpdate(self) {
+        const p = self.progress;
+        // campana asimetrica: sube rapido (0 -> 0.45), baja mas despacio (0.45 -> 1)
+        const t = p < 0.45 ? p / 0.45 : 1 - (p - 0.45) / 0.55;
+        pon(t * t * (3 - 2 * t));
+      },
+      onLeave: () => pon(0),
+      onLeaveBack: () => pon(0),
+    });
+  }
+
   // Reposo total: nada de transforms ni parallax, el contenido entra ya montado.
   if (quieto) return;
 
@@ -77,16 +100,16 @@ export function animaProyectos() {
         { y: 110 * ESC, scale: 0.98, opacity: 0, transformOrigin: '50% 60%' },
         { y: 0, scale: 1, opacity: 1, ease: 'none' }, 0)
       .fromTo(num,
-        { x: 160 * dir * ESC, opacity: 0 },
+        { x: 160 * dir * ESCX, opacity: 0 },
         { x: 0, opacity: 1, ease: 'none' }, 0)
       .fromTo(titulo,
-        { x: 120 * dir * ESC, opacity: 0 },
+        { x: 120 * dir * ESCX, opacity: 0 },
         { x: 0, opacity: 1, ease: 'none' }, 0.12)
       .fromTo(medios,
         { scale: 0.9, opacity: 0 },
         { scale: 1, opacity: 1, ease: 'none' }, 0.28)
       .fromTo(cuerpo,
-        { x: 100 * -dir * ESC, opacity: 0 },
+        { x: 100 * -dir * ESCX, opacity: 0 },
         { x: 0, opacity: 1, ease: 'none' }, 0.44);
 
     // ---- PARALLAX mientras el muro cruza la pantalla. Cada capa viaja en Y a velocidad
@@ -106,10 +129,15 @@ export function animaProyectos() {
         gsap.set(medios, { y: lejos * 25 });
         gsap.set(cuerpo, { y: lejos * 90 });
 
-        // El penduleo arranca en 0 al asomarse y vuelve a 0 al salir: solo pendula cerca del
-        // centro. La perspectiva la da el padre (.galeria), un solo contexto 3D para todo.
-        const swing = Math.sin(self.progress * Math.PI) * AMP * dir;
-        gsap.set(muro, { rotationY: swing });
+        // Inclinacion: PLANA en el centro de la pantalla (que es donde se lee) y ladeada solo al
+        // entrar y al salir, con signo opuesto en cada borde, como un panel que gira sobre su eje
+        // al pasar. Antes era sin(progress*PI): maxima justo en el centro, y con la perspectiva
+        // anclada arriba de toda la galeria los muros de abajo se veian sesgados. Ahora cada muro
+        // lleva su propia perspectiva (transformPerspective), centrada en el.
+        // Escritorio gira en Y (alterna por data-dir); movil cabecea en X, que no desborda.
+        const k = Math.sign(lejos) * Math.pow(Math.abs(lejos / ESC), 1.6);  // suave cerca de 0
+        if (angosto) gsap.set(muro, { rotationX: k * AMP, rotationY: 0, transformPerspective: 1100 });
+        else gsap.set(muro, { rotationY: -k * AMP * dir, rotationX: 0, transformPerspective: 1600 });
       },
     });
   });

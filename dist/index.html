@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <title>Sebastián Escobar — desarrollo web desde Medellín</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Desarrollo web desde Medellín: tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real. Tres trabajos contados por la decisión que hay detrás.">
+<meta name="description" content="Sebastián Escobar, desarrollador web en Medellín. Tiendas Shopify rápidas que venden, bots de WhatsApp que atienden pedidos solos y sistemas listos para tu negocio.">
 <meta name="theme-color" content="#05060a">
 <meta name="color-scheme" content="dark">
 <link rel="canonical" href="https://sebastiandevmed.github.io/me-on-3d/">
@@ -10,7 +10,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2305060a'/%3E%3Cpath d='M7 19a9 9 0 0 1 18 0z' fill='%23e8ecf4'/%3E%3Cpath d='M25 19h3v3H7v-3' fill='%234090ff'/%3E%3C/svg%3E">
 <meta property="og:type" content="profile">
 <meta property="og:title" content="Sebastián Escobar — desarrollo web desde Medellín">
-<meta property="og:description" content="Tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real.">
+<meta property="og:description" content="Tiendas Shopify rápidas que venden, bots de WhatsApp que atienden solos y sistemas listos para tu negocio.">
 <meta property="og:image" content="og.jpg">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:locale" content="es_CO">
@@ -66,6 +66,27 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--ambar);outline-offs
 body[data-3d="off"] #escena,body[data-3d="none"] #escena{opacity:0;pointer-events:none}
 body[data-3d="none"] #escena{display:none}
 
+/* ---- neblina de la union 3D -> proyectos. Dos capas fijas que lib/proyectos.js enciende con
+   --nb (0..1) en el <body> segun el scroll:
+   #neblina  debajo del contenido: desenfoca el cuarto y lo apaga un poco. El canvas se retira
+             DETRAS de ella, asi que no se ve el corte.
+   #calor    encima del contenido, en modo screen: el halo calido (--ambar, la luz del techo) que
+             hace que se lea como neblina y no como un simple fundido a negro. Muy bajo a proposito.
+   La deriva lenta de las manchas es lo unico que se mueve por su cuenta. */
+#neblina,#calor{position:fixed;inset:0;pointer-events:none;opacity:var(--nb,0);visibility:hidden}
+body.neblina #neblina,body.neblina #calor{visibility:visible}
+#neblina{z-index:0;background:color-mix(in srgb,var(--noche) 30%,transparent);
+  -webkit-backdrop-filter:blur(calc(var(--nb,0) * 14px));backdrop-filter:blur(calc(var(--nb,0) * 14px))}
+#calor{z-index:2;overflow:hidden;mix-blend-mode:screen}
+#calor::before{content:"";position:absolute;inset:-15%;
+  background:
+    radial-gradient(42% 30% at 32% 58%,rgba(255,196,140,.28),transparent 70%),
+    radial-gradient(38% 26% at 70% 42%,rgba(255,150,96,.20),transparent 72%),
+    radial-gradient(70% 22% at 50% 75%,rgba(255,214,170,.10),transparent 75%);
+  filter:blur(24px);animation:deriva 16s ease-in-out infinite alternate}
+@keyframes deriva{to{transform:translate3d(5%,-4%,0) scale(1.08)}}
+body[data-3d="none"] #neblina,body[data-3d="none"] #calor{display:none}
+
 #carga{position:fixed;inset:0;z-index:50;background:var(--noche);display:grid;place-content:center;
   justify-items:center;gap:1.2rem;transition:opacity .7s ease}
 #carga[hidden]{display:none}
@@ -108,8 +129,8 @@ body[data-3d="none"] .escena::before{display:none}
    el scroll y cambia segun el proyecto que este centrado. Un pequeno velo de oscuridad sobre
    el tinte garantiza que el texto blanco siempre se lea. */
 #proyectos{background:transparent}
-#proyectos::before{background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--noche) 55%,transparent));
-  top:0;height:22svh}
+#proyectos::before{background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--noche) 55%,transparent) 55%,transparent);
+  top:0;height:40svh}
 #proyectos .dentro{position:relative;z-index:1}
 /* Los viajes de entrada de GSAP en x (numero/titulo/cuerpo) se hornean al ANCHO de carga, y al
    pasar de escritorio a movil quedan desplazamientos laterales clavados fuera del viewport
@@ -161,7 +182,7 @@ body[data-3d="none"] #hero::after{content:"";position:absolute;inset:0;z-index:0
    diagonal (data-dir) y cada elemento dentro del muro entra con su propio viaje.
    El color de marca (--pColor) tine solo el numero, el estado y los botones: no hay borde
    ni fondo que encierre nada, el contenido ES el elemento. */
-.galeria{perspective:1400px;perspective-origin:50% 0%;margin-top:2.4rem}
+.galeria{margin-top:2.4rem}
 .muro{position:relative;padding:clamp(3rem,9svh,6rem) 0;transform-style:preserve-3d;
   will-change:transform}
 .muro-inner,.num-fondo,.muro-titulo,.medios,.cuerpo{will-change:transform}
@@ -267,14 +288,19 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
   section{padding:12svh clamp(1.2rem,5vw,2rem)}
   .muro{padding:clamp(2.4rem,8svh,4rem) 0}
   .galeria{margin-top:1.4rem}
+  #proyectos::before{height:50svh;
+    background:linear-gradient(180deg,var(--noche),color-mix(in srgb,var(--noche) 55%,transparent) 45%,transparent)}
   .num-fondo{font-size:clamp(6rem,30vw,9rem)}
-  .medios{grid-template-columns:1fr;gap:.9rem}
+  /* el celular se monta sobre la esquina del escritorio en vez de ocupar una pantalla entera */
+  .medios{grid-template-columns:1fr;gap:0}
+  .mockup.movil{width:58%;justify-self:end;margin-top:-14%;margin-right:2%}
   .mockup figcaption{font-size:.62rem}
   body[data-3d="none"] #hero{background-position:60% center}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   #escena,#carga,#hilo a{transition:none}
+  #calor::before{animation:none}
 }
 </style>
 <!-- Sin JavaScript no corre NADA, ni siquiera el script clasico del plan B, y la pantalla de
@@ -295,12 +321,14 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
 <div id="tintabg" aria-hidden="true"></div>
 <div id="carga" role="status" aria-live="polite"><p id="cargaTxt">cargando el cuarto…</p><div id="barra"><i></i></div></div>
 <div id="escena" aria-hidden="true"></div>
+<div id="neblina" aria-hidden="true"></div>
+<div id="calor" aria-hidden="true"></div>
 
 <ul id="hilo" role="list" aria-label="Secciones">
   <li><a href="#hero" aria-label="Portada"></a></li>
-  <li><a href="#sobreMi" aria-label="Cómo trabajo"></a></li>
-  <li><a href="#stack" aria-label="Lo que hay en las pantallas"></a></li>
-  <li><a href="#proyectos" aria-label="Tres trabajos"></a></li>
+  <li><a href="#sobreMi" aria-label="Por qué conmigo"></a></li>
+  <li><a href="#stack" aria-label="Herramientas"></a></li>
+  <li><a href="#proyectos" aria-label="Proyectos"></a></li>
   <li><a href="#contacto" aria-label="Hablemos"></a></li>
 </ul>
 
@@ -308,41 +336,41 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
   <section id="hero" class="escena">
     <div class="col">
       <h1>Sebastián Escobar</h1>
-      <p class="sub">Desarrollo web desde Medellín. Tiendas Shopify, agentes de WhatsApp y sistemas que sostienen un negocio real.</p>
-      <p class="lugar">Campo Valdés, Medellín</p>
+      <p class="sub">Construyo tiendas Shopify que venden, bots de WhatsApp que atienden solos y sistemas que tu negocio usa desde el primer día.</p>
+      <p class="lugar">Medellín, Colombia · Respondo en el día</p>
       <p class="pista" id="pista"><b>Mové el mouse</b> — él te sigue. Hacé clic encima y se pone los audífonos.</p>
     </div>
   </section>
 
   <section id="sobreMi" class="escena">
     <div class="col">
-      <p class="kicker">Cómo trabajo</p>
-      <h2>La decisión, no la cantidad de código</h2>
-      <p>En Amaranthus Gold reescribí mi propia arquitectura: había entregado un front en React y lo migré a Liquid con JavaScript plano. El sitio pasó de 460&nbsp;KB de JS a 12&nbsp;KB.</p>
-      <p>Revisar lo que uno ya entregó es incómodo y es la parte que más enseña. Es exactamente lo mismo que hago cuando entro a un proyecto de otro: primero entender por qué está así, después tocar.</p>
+      <p class="kicker">Por qué conmigo</p>
+      <h2>Sitios rápidos, impecables y hechos para vender</h2>
+      <p>No entrego plantillas maquilladas. Cada decisión técnica la tomo pensando en lo que le importa a tu negocio: que cargue rápido en cualquier celular, que se vea a la altura de tu marca y que convierta visitas en clientes.</p>
+      <p>Un ejemplo real: en Amaranthus Gold bajé el JavaScript de la tienda de 460&nbsp;KB a 12&nbsp;KB. Mismo diseño, 97&nbsp;% más liviana.</p>
     </div>
   </section>
 
   <section id="stack" class="escena">
     <div class="col">
-      <p class="kicker">Lo que hay en las pantallas</p>
-      <h2>Herramientas que uso de verdad</h2>
-      <p>Ordenadas por en cuántos proyectos las tengo puestas hoy, no por cuáles suenan mejor.</p>
+      <p class="kicker">Herramientas</p>
+      <h2>Tecnología probada, no experimentos con tu proyecto</h2>
+      <p>Trabajo con lo que uso todos los días en proyectos que están funcionando. Tu proyecto no es mi laboratorio.</p>
       <ul class="stack" role="list">
         <li data-peso="alto">React</li><li data-peso="alto">TypeScript</li><li data-peso="alto">Supabase</li>
         <li data-peso="alto">Python</li><li data-peso="alto">GSAP</li>
         <li>Next.js</li><li>Cloudflare Workers</li><li>Node y Express</li><li>Shopify Liquid</li>
         <li>Twilio</li><li>Redis</li><li>Postgres</li><li>Tailwind</li><li>Playwright</li><li>Vitest</li><li>Zod</li>
       </ul>
-      <p class="leyenda">Las grandes están en tres proyectos a la vez. Las pequeñas, en uno.</p>
+      <p class="leyenda">En grande, las que domino a fondo y uso en varios proyectos a la vez.</p>
     </div>
   </section>
 
   <section id="proyectos" class="plano">
     <div class="dentro">
-      <p class="kicker">Tres trabajos</p>
-      <h2>Uno en producción, uno de consultoría, uno que atiende clientes solo</h2>
-      <p class="bajada">Cada uno resolvió un problema distinto, así que cada uno se cuenta distinto.</p>
+      <p class="kicker">Proyectos</p>
+      <h2>Resultados reales para negocios reales</h2>
+      <p class="bajada">Una tienda de lujo en producción, una marca construida desde cero y un vendedor que toma pedidos por WhatsApp solo. Problemas distintos, la misma exigencia.</p>
 
       <div class="galeria">
         <article class="muro" style="--pColor:#e03989;--pContra:#fff" data-dir="-1">
@@ -361,16 +389,16 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
               <figure class="mockup movil"><img src="img/amaranthus-movil.webp" alt="Mockup de Amaranthus Gold en celular." loading="lazy" width="700" height="1238"><figcaption>Celular</figcaption></figure>
             </div>
             <div class="cuerpo">
-              <p>Tema Shopify 2.0 hecho a medida con 163 productos cargados y un generador de catálogo en PDF escrito en Python, para que el equipo arme una propuesta de venta sin diseñador.</p>
-              <p class="decision">Yo mismo había entregado el front en React. Lo migré a Liquid + JavaScript plano y documenté por qué: en una tienda, el JavaScript que no se descarga es la mejor optimización que existe.</p>
+              <p>Una tienda Shopify a la medida de una joyería de lujo: 163 productos, un diseño a la altura de la marca y un generador de catálogos en PDF para que el equipo arme sus propuestas de venta por su cuenta, sin depender de un diseñador.</p>
+              <p class="decision">97&nbsp;% menos JavaScript. Pasé el front de React a Liquid y JavaScript plano para que la tienda cargue ligera en cualquier celular: menos espera para el cliente, mejor experiencia de compra.</p>
               <div class="pesos" role="img" aria-label="JavaScript enviado al navegador: antes 460 KB, después 12 KB.">
                 <div class="fila"><span>Antes</span><span class="b"><span style="width:100%"></span></span><span class="val">460 KB</span></div>
                 <div class="fila despues"><span>Después</span><span class="b"><span style="width:2.6%"></span></span><span class="val">12 KB</span></div>
               </div>
               <ul class="tags" role="list"><li>Shopify Liquid</li><li>JS plano</li><li>Python</li><li>163 productos</li></ul>
               <div class="acciones">
-                <a class="btn solido" href="https://amaranthusgold.com" rel="noopener">Ver tienda <span class="flecha">→</span></a>
-                <a class="btn borde" href="mailto:sebastianmedev@gmail.com?subject=Amaranthus%20Gold">Pedir algo así <span class="flecha">→</span></a>
+                <a class="btn solido" href="https://amaranthusgold.com" rel="noopener">Ver la tienda en vivo <span class="flecha">→</span></a>
+                <a class="btn borde" href="mailto:sebastianmedev@gmail.com?subject=Amaranthus%20Gold">Quiero una tienda así <span class="flecha">→</span></a>
               </div>
             </div>
           </div>
@@ -389,8 +417,8 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
               <figure class="mockup movil"><img src="img/holistic-movil.webp" alt="Mockup de Holistic Eco·Hotel en celular." loading="lazy" width="700" height="1252"><figcaption>Celular</figcaption></figure>
             </div>
             <div class="cuerpo">
-              <p>Investigación de marca, sistema de diseño completo con paleta día y noche, tres familias tipográficas con su jerarquía, y una maqueta funcional para que el cliente pudiera verlo antes de decidir.</p>
-              <p class="decision">Acá el trabajo no fue de programación: fue de consultoría. La pregunta no era cómo construirlo sino qué construir, y la respuesta se entregó en forma de sistema, no de pantallas sueltas.</p>
+              <p>Para este eco-hotel empecé por la marca, no por el código: investigación, un sistema de diseño completo con modo día y noche, tipografías con jerarquía clara y una maqueta funcional para que el cliente viera su sitio antes de invertir en desarrollo.</p>
+              <p class="decision">Te ayudo a decidir qué construir antes de cobrarte por construirlo. Así cada peso de tu inversión va a lo que tu negocio de verdad necesita.</p>
               <div class="paleta">
                 <div class="fila"><span class="et">Día</span>
                   <i style="background:#F6F1E7" title="bone"></i><i style="background:#D9C7A7" title="sand"></i>
@@ -406,7 +434,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
               <p class="specimen">Tipografías: <b>Italiana</b> solo para el logotipo · <b>Cormorant Garamond</b> para títulos y voz editorial · <b>Raleway</b> para todo el cuerpo y la interfaz.</p>
               <ul class="tags" role="list"><li>Design system</li><li>Research de marca</li><li>React</li><li>Maqueta funcional</li></ul>
               <div class="acciones">
-                <a class="btn borde" href="mailto:sebastianmedev@gmail.com?subject=Holistic%20Eco%C2%B7Hotel">Ver la propuesta <span class="flecha">→</span></a>
+                <a class="btn borde" href="mailto:sebastianmedev@gmail.com?subject=Holistic%20Eco%C2%B7Hotel">Quiero una propuesta así <span class="flecha">→</span></a>
               </div>
             </div>
           </div>
@@ -425,8 +453,8 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
               <figure class="mockup movil"><img src="img/pipebot-movil.webp" alt="Mockup de PipeBot en un chat de WhatsApp en celular." loading="lazy" width="700" height="1252"><figcaption>Celular</figcaption></figure>
             </div>
             <div class="cuerpo">
-              <p>Un agente de ventas por WhatsApp para Papas Pipe. Toma pedidos al por mayor, aplica las reglas del negocio —mínimo 30 paquetes, horario de lunes a viernes, precios fijos— y escala a una persona cuando hace falta.</p>
-              <p>Tres modelos en cadena: si el primero se cae, el pedido no se pierde, lo atiende el siguiente. Para un negocio que vende por WhatsApp, quedarse mudo media hora es perder la venta.</p>
+              <p>Un vendedor por WhatsApp que no se cansa. Toma pedidos al por mayor para Papas Pipe, aplica solo las reglas del negocio —mínimo 30 paquetes, horario de lunes a viernes, precios fijos— y le pasa la conversación a una persona cuando hace falta.</p>
+              <p>Funciona con tres modelos de IA en cadena: si uno falla, el siguiente responde. Tu cliente nunca se queda sin respuesta y vos no perdés una venta por una caída.</p>
               <div class="diagrama">
                 <svg viewBox="0 0 720 292" role="img" aria-label="Diagrama: WhatsApp entra por Twilio al backend de Node y Express, que guarda en Supabase y usa Redis para historial. El backend consulta DeepSeek V4 Pro; si falla pasa a Groq LLaMA 3.3 70B y luego a Gemini 2.0 Flash.">
                   <defs>
@@ -478,11 +506,12 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
                   </g>
                 </svg>
               </div>
-              <p class="decision">Lo difícil no fue el bot: fue el panel donde una persona toma la conversación sin que el bot le siga escribiendo encima al cliente. La conversación tiene dueño explícito en la base de datos, y mientras es de la persona, el agente calla.</p>
-              <p class="traspaso"><span class="pill on">bot_active</span> ⇄ <span class="pill hum">human_active</span> — un estado en Postgres decide quién contesta.</p>
+              <p class="decision">Bot y equipo trabajan juntos sin pisarse. Desde un panel propio, una persona toma la conversación cuando quiere y el bot se aparta al instante; cuando la suelta, el bot retoma. Cero mensajes cruzados con el cliente.</p>
+              <p class="traspaso"><span class="pill on">bot_active</span> ⇄ <span class="pill hum">human_active</span> — un solo interruptor decide quién contesta.</p>
               <ul class="tags" role="list"><li>Node y Express</li><li>Twilio</li><li>Supabase</li><li>Redis</li><li>Realtime</li></ul>
               <div class="acciones">
                 <a class="btn solido" href="https://wa.me/573002212495" rel="noopener">Probar el bot <span class="flecha">→</span></a>
+                <a class="btn borde" href="mailto:sebastianmedev@gmail.com?subject=Bot%20de%20WhatsApp">Quiero uno para mi negocio <span class="flecha">→</span></a>
               </div>
             </div>
           </div>
@@ -494,8 +523,8 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
   <section id="contacto" class="plano">
     <div class="dentro">
       <p class="kicker">Hablemos</p>
-      <h2>Contame qué necesitás y te digo si soy la persona indicada</h2>
-      <p class="bajada">Si no lo soy, también te lo digo. Respondo en el día.</p>
+      <h2>Tu próximo proyecto empieza con un mensaje</h2>
+      <p class="bajada">Contame qué necesitás y te respondo en el día con una idea clara de cómo lo haría. Sin compromiso.</p>
       <ul class="enlaces" role="list">
         <li><a href="mailto:sebastianmedev@gmail.com?subject=Proyecto%20web">sebastianmedev@gmail.com</a>
             <button class="copiar" type="button" data-copiar="sebastianmedev@gmail.com">copiar</button></li>
