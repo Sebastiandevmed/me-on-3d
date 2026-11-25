@@ -2,7 +2,7 @@
 
 Documento de traspaso para continuar en una conversación nueva con el mismo flujo de trabajo. Se actualiza en cada hito.
 
-**Última actualización:** 2026-09-27 (sesión 13, rama `calidad-avatar`: el grafiti pasó a ser una pieza 3:2 de 2.4 m que cubre la pared lateral de punta a punta y tiene RELIEVE real (capas apiladas de 6 cm + sombra de contacto + contorno cel recortado por la silueta, ver "Sesión 13"); el pre-pase del contorno acepta ahora `userData.outlineMaterial` / `userData.outline === false` por malla; encuadre vertical del hero rehecho para la pieza ancha. Antes — sesión 12: grafiti cuadrado + neones; sesión 11: cáscara interior contra las grietas. Pendiente del usuario: capturas de PipeBot, links de contacto, dominio)
+**Última actualización:** 2026-11-25 (sesión 14: neblina cálida 3D→proyectos, tarjetas derechas en móvil, textos comerciales; antes — sesión 13, rama `calidad-avatar`: el grafiti pasó a ser una pieza 3:2 de 2.4 m que cubre la pared lateral de punta a punta y tiene RELIEVE real (capas apiladas de 6 cm + sombra de contacto + contorno cel recortado por la silueta, ver "Sesión 13"); el pre-pase del contorno acepta ahora `userData.outlineMaterial` / `userData.outline === false` por malla; encuadre vertical del hero rehecho para la pieza ancha. Antes — sesión 12: grafiti cuadrado + neones; sesión 11: cáscara interior contra las grietas. Pendiente del usuario: capturas de PipeBot, links de contacto, dominio)
 
 ## Cómo retomar
 
@@ -871,3 +871,28 @@ regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de a
 - En primer plano extremo (a < 1 m) la pila deja ver escalones en los bordes de los paneles
   cian y el colibrí; desde cualquier cámara de la landing no se nota. Si molesta: más capas
   (`LAYERS`) o menos profundidad (`?gdepth=0.04`).
+
+## Sesión 14 (2026-11-25) — neblina cálida en la unión 3D → proyectos y tarjetas derechas (móvil)
+
+- **Corte seco 3D → proyectos.** En móvil el velo de `stack` termina en `--noche` sólido y `#proyectos`
+  arrancaba transparente: quedaba una franja de 3D crudo con borde duro y luego el canvas se apagaba de
+  golpe. Ahora: `#proyectos::before` en móvil arranca en `--noche` sólido y se desvanece a transparente
+  (también en escritorio el velo termina en transparente, ya no corta a 55 %). Dos capas fijas nuevas,
+  `#neblina` (debajo del contenido: `backdrop-filter` blur hasta 14 px + leve oscurecido) y `#calor`
+  (encima, `mix-blend-mode:screen`, manchas ámbar con deriva de 16 s). `lib/proyectos.js` escribe
+  `--nb` (0..1) en el `<body>` con una campana ligada al scroll de `#proyectos` (top bottom → top top,
+  pico al 45 %), que cae donde el observador apaga el canvas: el apagado ocurre dentro de la neblina.
+  Modo reducido: la neblina sigue (es opacidad), la deriva no. Plan B: ocultas.
+- **Tarjetas de proyectos.** El penduleo era `sin(progress·π)`: máximo JUSTO en el centro, y con la
+  perspectiva de `.galeria` anclada arriba (50 % 0 %) las de abajo se veían sesgadas. Ahora cada muro lleva
+  su `transformPerspective`, queda plano en el centro y se ladea solo al entrar/salir (curva `|x|^1.6`):
+  escritorio `rotationY` ±7°, móvil solo `rotationX` ±5°. En móvil los viajes en X bajan al 15 % (cortaban
+  los títulos) y el mockup del celular va al 58 % montado sobre la esquina del escritorio.
+- **Textos comerciales** (pedido del usuario: "que todos los clientes estén seguros de que soy su mejor opción";
+  no le gustaba el tono "lo difícil fue"): todo el copy reescrito orientado a beneficio y con CTAs ("Quiero una
+  tienda así", "Quiero uno para mi negocio" nuevo en PipeBot), meta description/og nuevas. Solo datos reales
+  (163 productos, 460→12 KB = 97 %, 3 modelos en cadena, reglas de PipeBot); sin cifras de ventas ni testimonios.
+- Verificación: `node tools/landing_probe.mjs` → `LANDING OK` (desborde 0). Publicado: `dist/` regenerado,
+  `main` por fast-forward y push (Pages).
+- Siguiente paso hablado: pauta en Instagram con la cuenta en 0 seguidores. Pendientes para eso: analítica
+  (no hay ninguna), CTA directo a WhatsApp de trabajo, dominio propio, contenido mínimo en el perfil.
