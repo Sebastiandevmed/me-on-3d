@@ -268,6 +268,20 @@ footer{padding:2rem clamp(1.5rem,5vw,5rem) 4rem;background:var(--tinta);color:va
 footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
   border-top:1px solid var(--linea);padding-top:1.6rem}
 
+/* ---- WhatsApp flotante. Sutil a proposito: pequeno, oscuro y translucido como el resto de la
+   noche, sin pulso ni globo. No aparece en la portada (ahi manda el 3D) sino al bajar media
+   pantalla, y se retira cuando el bloque de contacto esta a la vista porque ahi ya esta el enlace. */
+#wa{position:fixed;right:max(1rem,env(safe-area-inset-right));bottom:max(1rem,env(safe-area-inset-bottom));
+  z-index:4;display:inline-flex;align-items:center;gap:.5rem;height:44px;padding:0 .8rem 0 .7rem;
+  border-radius:999px;border:1px solid color-mix(in srgb,var(--papel) 12%,transparent);
+  background:color-mix(in srgb,var(--noche) 70%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  color:var(--niebla);font-size:.8rem;text-decoration:none;
+  opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .4s ease,transform .4s ease,color .2s,border-color .2s}
+#wa.ver{opacity:.85;transform:none;pointer-events:auto}
+#wa:hover,#wa:focus-visible{opacity:1;color:#7bd99a;border-color:color-mix(in srgb,#25d366 45%,transparent)}
+#wa svg{width:19px;height:19px;flex:none}
+@media (max-width:820px){#wa span{display:none}#wa{width:44px;padding:0;justify-content:center}}
+
 /* ---- hilo de secciones: donde vas, y que el 3D vive solo en el primer tramo */
 #hilo{position:fixed;right:1.4rem;top:50%;transform:translateY(-50%);z-index:3;
   display:grid;gap:.85rem;margin:0;padding:0;list-style:none}
@@ -300,6 +314,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
+  #wa{transition:none}
   #escena,#carga,#hilo a{transition:none}
   #calor::before{animation:none}
 }
@@ -529,13 +544,22 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
       <ul class="enlaces" role="list">
         <li><a href="mailto:sebastianmedev@gmail.com?subject=Proyecto%20web">sebastianmedev@gmail.com</a>
             <button class="copiar" type="button" data-copiar="sebastianmedev@gmail.com">copiar</button></li>
+        <li><a href="https://wa.me/573206648234?text=Hola%20Sebasti%C3%A1n%2C%20vi%20tu%20p%C3%A1gina%20y%20quiero%20hablar%20de%20un%20proyecto" rel="noopener" target="_blank">WhatsApp · +57 320 664 8234</a></li>
         <li><a href="https://github.com/Sebastiandevmed" rel="me noopener">github.com/Sebastiandevmed</a></li>
       </ul>
-      <!-- Pendiente del usuario: LinkedIn, WhatsApp de trabajo y dominio propio.
+      <!-- Pendiente del usuario: LinkedIn y dominio propio.
            Al llegar entran como <li> aquí y en el JSON-LD sameAs de abajo. -->
     </div>
   </section>
 </main>
+
+<a id="wa" href="https://wa.me/573206648234?text=Hola%20Sebasti%C3%A1n%2C%20vi%20tu%20p%C3%A1gina%20y%20quiero%20hablar%20de%20un%20proyecto" rel="noopener" target="_blank" aria-label="Escribirme por WhatsApp">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M3.5 20.5l1.3-4.1A8.5 8.5 0 1 1 8 19.6z"/>
+    <path d="M9 8.6c.2-.5.5-.6.8-.6h.5l.9 2-.6.8c.4.9 1.2 1.7 2.1 2.1l.8-.6 2 .9v.5c0 .4-.2.7-.6.9-.7.3-1.6.2-2.6-.3a7.6 7.6 0 0 1-3.2-3.2c-.5-1-.6-1.9-.1-2.5z"/>
+  </svg>
+  <span>Escribime</span>
+</a>
 
 <footer>
   <div class="dentro">
@@ -546,7 +570,7 @@ footer .dentro{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wra
 
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","name":"Sebastián Escobar",
- "jobTitle":"Desarrollador web","email":"mailto:sebastianmedev@gmail.com",
+ "jobTitle":"Desarrollador web","email":"mailto:sebastianmedev@gmail.com","telephone":"+57 320 664 8234",
  "address":{"@type":"PostalAddress","addressLocality":"Medellín","addressCountry":"CO"},
  "sameAs":["https://github.com/Sebastiandevmed"],
  "knowsAbout":["Shopify","React","TypeScript","Supabase","Node.js","Python"]}
@@ -715,6 +739,20 @@ for (const b of document.querySelectorAll('.copiar')) {
     setTimeout(() => { b.textContent = 'copiar'; }, 1800);
   });
 }
+</script>
+<script>
+// WhatsApp flotante: visible tras bajar media pantalla, oculto mientras contacto este a la vista.
+(() => {
+  const wa = document.getElementById('wa'), contacto = document.getElementById('contacto');
+  if (!wa) return;
+  let enContacto = false;
+  const pinta = () => wa.classList.toggle('ver', scrollY > innerHeight * 0.5 && !enContacto);
+  if (contacto && 'IntersectionObserver' in window) {
+    new IntersectionObserver(([e]) => { enContacto = e.isIntersecting; pinta(); }, { threshold: 0.25 }).observe(contacto);
+  }
+  addEventListener('scroll', pinta, { passive: true });
+  pinta();
+})();
 </script>
 <script type="module">
 import { animaProyectos } from './lib/proyectos.js';
