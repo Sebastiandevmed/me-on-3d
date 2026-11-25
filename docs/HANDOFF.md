@@ -894,5 +894,9 @@ regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de a
   (163 productos, 460→12 KB = 97 %, 3 modelos en cadena, reglas de PipeBot); sin cifras de ventas ni testimonios.
 - Verificación: `node tools/landing_probe.mjs` → `LANDING OK` (desborde 0). Publicado: `dist/` regenerado,
   `main` por fast-forward y push (Pages).
+- **Hero móvil:** `hero.movil.target.y` 0.12 → -0.15 (grafiti y barra LED más arriba y más grandes; a 390×664,
+  con las barras de Safari, quedaban pegados al texto) y `#hero{padding-bottom:6svh}` en móvil.
+- Pages: `deploy-pages@v4` dejó de encontrar el artefacto de `upload-pages-artifact@v3` ("No artifacts named
+  github-pages"); el workflow pasó a configure-pages@v6 / upload-pages-artifact@v5 / deploy-pages@v5.
 - Siguiente paso hablado: pauta en Instagram con la cuenta en 0 seguidores. Pendientes para eso: analítica
   (no hay ninguna), CTA directo a WhatsApp de trabajo, dominio propio, contenido mínimo en el perfil.
