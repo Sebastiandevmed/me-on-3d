@@ -894,10 +894,11 @@ regenerados con la pieza ancha. `tools/build_site.sh` → `dist/`. Capturas de a
   (163 productos, 460→12 KB = 97 %, 3 modelos en cadena, reglas de PipeBot); sin cifras de ventas ni testimonios.
 - Verificación: `node tools/landing_probe.mjs` → `LANDING OK` (desborde 0). Publicado: `dist/` regenerado,
   `main` por fast-forward y push (Pages).
-- **Hero móvil:** `hero.movil.target.y` 0.12 → -0.15 (grafiti y barra LED más arriba y más grandes; a 390×664,
-  con las barras de Safari, quedaban pegados al texto) y `#hero{padding-bottom:6svh}` en móvil.
+- **Hero móvil:** cámara `pos (-1.90, 2.05, -3.80)` → `target (0.67, 0.20, -0.74)`, fov 60 (antes y 1.25 / 0.12): más alta y
+  mirando abajo, el grafiti y la barra LED quedan enteros por encima de los monitores (antes los PC les tapaban la mitad) y `#hero{padding-bottom:6svh}` en móvil.
 - Pages: `deploy-pages@v4` dejó de encontrar el artefacto de `upload-pages-artifact@v3` ("No artifacts named
   github-pages"); el workflow pasó a configure-pages@v6 / upload-pages-artifact@v5 / deploy-pages@v5.
+- **LinkedIn** en contacto y en `sameAs`: linkedin.com/in/sebastian-escobar-sebasdev.
 - **WhatsApp** (+57 320 664 8234): botón flotante `#wa` (aparece tras media pantalla, se oculta con contacto a la vista; en móvil solo el ícono), enlace en contacto y `telephone` en el JSON-LD. Mensaje prellenado.
 - Siguiente paso hablado: pauta en Instagram con la cuenta en 0 seguidores. Pendientes para eso: analítica
   (no hay ninguna), CTA directo a WhatsApp de trabajo, dominio propio, contenido mínimo en el perfil.
